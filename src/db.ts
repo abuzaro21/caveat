@@ -57,6 +57,12 @@ export const legacyParts = (windowLabel: string, reason: string) =>
 type LegacyRow = { session: string; id: string; window_label: string; reason: string };
 const BACKFILL_SELECT = "SELECT session, id, window_label, reason FROM bookings WHERE parts = ''";
 const BACKFILL_UPDATE = 'UPDATE bookings SET parts = ? WHERE session = ? AND id = ?';
+// Migration: ingest audit entries once listed stored evidence ids. Audit entries carry counts only, so an id must not
+// outlive the evidence it named. Rewrites any old-format entry to a count.
+type AuditRow = { session: string; seq: number; detail: string };
+const AUDIT_SELECT = `SELECT session, seq, detail FROM audit WHERE op = 'ingest' AND detail LIKE '%"stored":[%'`;
+const AUDIT_UPDATE = 'UPDATE audit SET detail = ? WHERE session = ? AND seq = ?';
+const auditCount = (detail: string) => { const d = JSON.parse(detail); if (Array.isArray(d.stored)) d.stored = d.stored.length; return JSON.stringify(d); };
 
 /** Every table that can hold session data, for verification scans. */
 export const TABLES = ['evidence', 'memory_index', 'summaries', 'uses', 'bookings', 'tombstones', 'receipts', 'audit'] as const;
@@ -81,6 +87,7 @@ export class SqliteDb implements Db {
     const cols = this.db.prepare('PRAGMA table_info(bookings)').all() as { name: string }[];
     if (!cols.some((c) => c.name === 'parts')) this.db.exec("ALTER TABLE bookings ADD COLUMN parts TEXT NOT NULL DEFAULT ''");
     for (const r of this.db.prepare(BACKFILL_SELECT).all() as LegacyRow[]) this.db.prepare(BACKFILL_UPDATE).run(legacyParts(r.window_label, r.reason), r.session, r.id);
+    for (const r of this.db.prepare(AUDIT_SELECT).all() as AuditRow[]) this.db.prepare(AUDIT_UPDATE).run(auditCount(r.detail), r.session, r.seq);
   }
   tx<T>(_lock: string | null, fn: (q: Q) => Promise<T>): Promise<T> {
     const run = async () => {
@@ -118,6 +125,7 @@ export class PgDb implements Db {
       // Migration: databases created before bookings.parts existed. Runs before any request is served.
       await c.query("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS parts TEXT NOT NULL DEFAULT ''");
       for (const r of (await c.query(BACKFILL_SELECT)).rows as LegacyRow[]) await c.query('UPDATE bookings SET parts = $1 WHERE session = $2 AND id = $3', [legacyParts(r.window_label, r.reason), r.session, r.id]);
+      for (const r of (await c.query(AUDIT_SELECT)).rows as AuditRow[]) await c.query('UPDATE audit SET detail = $1 WHERE session = $2 AND seq = $3', [auditCount(r.detail), r.session, r.seq]);
     } finally { c.release(); }
     return new PgDb(pool);
   }

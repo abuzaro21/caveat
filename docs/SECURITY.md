@@ -37,6 +37,7 @@ CAVEAT is a public demo with no accounts and no real personal data. The threat m
 | 1 | Codex, GPT-6.1 Sol, read-only | 9 findings: crash, forged corroboration, freshness laundering, booking copies, worker plaintext, re-dated resurrection, sibling traversal, future holds, export snapshot | All fixed with regression tests. 7 of 9 fail on the pre-fix code. [Response](reviews/codex-review-1-response.md) |
 | 2 | Same | 7 closed, 2 partial; 3 new findings: page-held copies, legacy schema, holds inside a slot | All fixed. [Response](reviews/codex-review-2-response.md) |
 | 3 | Same | Hold fix closed; 3 findings: search terms and composer draft kept in the tab, legacy text with no surviving evidence, false failures on ordinary vocabulary | All fixed. [Response](reviews/codex-review-3-response.md) |
+| 4 | Same | No HIGH. Review-3 items 1 and 2 closed, item 3 partial. 2 MEDIUM findings: false page-proof failures on the interface's own wording, and evidence ids left in old ingest audit entries | All fixed. [Response](reviews/codex-review-4-response.md) |
 
 ## Known limits
 

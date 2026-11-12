@@ -53,6 +53,11 @@ function needlesOf(target: Memory, state: State): Needles {
   return { ids, text: [...text] };
 }
 const leaks = (x: unknown, n: Needles) => { const t = JSON.stringify(x ?? null).toLowerCase(); return [...n.ids, ...n.text].filter((m) => t.includes(m)).length; };
+/** The page's own fixed wording ("Talking to Maya", "Assistant", "Forget with proof"…), read from the app's scripts.
+ *  A word the interface always shows cannot prove the page kept a memory, so the page proof leaves it out. */
+let fixedText: Promise<string> | null = null;
+const fixedVocabulary = () => (fixedText ??= Promise.all([...document.querySelectorAll<HTMLScriptElement>('script[src]')].map((s) => fetch(s.src).then((r) => r.text()).catch(() => '')))
+  .then((xs) => xs.join('\n').toLowerCase()));
 const traces = (n: number) => `${n} trace${n === 1 ? '' : 's'} of it found`; // a count, never the text itself
 
 export function App() {
@@ -238,11 +243,13 @@ export function App() {
         } catch (e) { if (e instanceof ApiError && e.status === 404) return { pass: true, detail: 'the job was already released and fenced' }; throw e; }
       });
       await step('page', async () => {
-        if (!markers.ids.length && !markers.text.length) return { pass: false, detail: 'nothing to check against' };
+        const fixed = await fixedVocabulary();
+        const page = { ids: markers.ids, text: markers.text.filter((w) => !fixed.includes(w)) };
+        if (!page.ids.length && !page.text.length) return { pass: false, detail: 'nothing to check against' };
         const held = heldRef.current;
         const screen = document.querySelector('.app-body')?.textContent ?? '';
-        const l = leaks({ ...held, screen }, markers);
-        return { pass: l === 0, detail: `the text on screen, ${held.msgs.length} message(s), the composer and the evidence and naive panels, checked for ${markers.ids.length} record id(s) and ${markers.text.length} phrase(s) found only in this memory: ${l ? traces(l) : 'none found'}` };
+        const l = leaks({ ...held, screen }, page);
+        return { pass: l === 0, detail: `the text on screen, ${held.msgs.length} message(s), the composer and the evidence and naive panels, checked for ${page.ids.length} record id(s) and ${page.text.length} phrase(s) found only in this memory: ${l ? traces(l) : 'none found'}` };
       });
       if (predicate === 'location.private') mark('c2');
     } finally {

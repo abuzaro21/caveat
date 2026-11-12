@@ -108,12 +108,15 @@ test('C2: a relearned short memory, once forgotten, is gone from the page and th
 });
 
 // Codex review 3, finding 3: text shared with records that are kept ("home") is not evidence of a leak.
-test('C3: a memory whose text is ordinary vocabulary still proves cleanly after it is forgotten', async ({ page }) => {
-  const errors = await open(page);
-  await relearn(page, 'Home');
-  await forgetAndProve(page);
-  expect(errors).toEqual([]);
-});
+// Codex review 4, finding 1: nor is text that is part of the app's own fixed vocabulary ("Talking", "Proof").
+for (const label of ['Home', 'Talking', 'Proof']) {
+  test(`C3: a memory labelled "${label}" still proves cleanly after it is forgotten`, async ({ page }) => {
+    const errors = await open(page);
+    await relearn(page, label);
+    await forgetAndProve(page);
+    expect(errors).toEqual([]);
+  });
+}
 
 test('sessions are isolated: forgetting in one visitor session leaves another untouched', async ({ browser }) => {
   const a = await browser.newContext(), b = await browser.newContext();

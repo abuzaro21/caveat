@@ -97,3 +97,27 @@ test('R3-2: forgetting rewrites a migrated legacy explanation even when no evide
     await db.close();
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+
+// Codex review 4, finding 2: ingest audit entries written before they were counts-only still named evidence ids.
+test('R4-2: old ingest audit entries are rewritten to counts on open, so no id outlives its evidence', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'caveat-r4-'));
+  const schema = `t_${randomBytes(4).toString('hex')}`;
+  const openDb = async (): Promise<Db> => (PG_URL ? PgDb.open(PG_URL, schema) : new SqliteDb(join(dir, 'audit.db')));
+  try {
+    let db = await openDb();
+    const c = new Caveat(db, SECRET);
+    const { sid } = await c.createSession();
+    const r = await c.ingest(sid, 'chat', [{ subject: 'maya', predicate: 'location.private', value: { label: 'Gym', day: 'fri', from: 15, to: 17 }, excerpt: 'Gym' } as never]);
+    const id = r[0]?.id;
+    assert.ok(id, 'an evidence id was stored');
+    await db.tx(null, (q) => q.run("UPDATE audit SET detail = ? WHERE session = ? AND op = 'ingest' AND seq = (SELECT MAX(seq) FROM audit WHERE session = ? AND op = 'ingest')",
+      [JSON.stringify({ channel: 'chat', stored: [id], duplicates: 0, rejected: [] }), sid, sid]));
+    await db.close();
+    db = await openDb();
+    const rows = await db.tx(null, (q) => q.all<{ detail: string }>("SELECT detail FROM audit WHERE session = ? AND op = 'ingest'", [sid]));
+    assert.ok(rows.length > 0);
+    assert.doesNotMatch(JSON.stringify(rows), new RegExp(id));
+    assert.ok(rows.every((x) => typeof JSON.parse(x.detail).stored === 'number'));
+    await db.close();
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});

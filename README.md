@@ -49,8 +49,8 @@ Requires Node 24.13 or later (native TypeScript, `node:sqlite`).
 npm ci
 npm run build          # UI -> public/
 npm start              # http://localhost:3000, SQLite in data/
-npm test               # 62 tests: policy, scenarios, adversarial, HTTP, restart, review regressions
-npm run test:e2e       # Playwright, desktop + mobile (16 tests)
+npm test               # 63 tests: policy, scenarios, adversarial, HTTP, restart, review regressions
+npm run test:e2e       # Playwright, desktop + mobile (20 tests)
 ```
 
 To run the same suite on PostgreSQL, set `CAVEAT_TEST_DATABASE_URL=postgres://…` before `npm test`. To serve from PostgreSQL, set `DATABASE_URL` (see [docs/DEPLOY.md](docs/DEPLOY.md)).
