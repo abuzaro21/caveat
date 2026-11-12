@@ -44,8 +44,8 @@ One Node 24 process serves a React UI and a JSON API. It stores everything in Po
 |---|---|
 | 65/65 tests on SQLite and 65/65 on PostgreSQL 16 | `docs/evidence/test-sqlite.log`, `test-postgres.log` |
 | 22/22 browser tests, desktop and mobile | `docs/evidence/e2e.log` |
-| Clean-clone CI: typecheck, build, tests, browser tests, `npm audit` (0 vulnerabilities), Docker build and smoke | `docs/evidence/local-ci.log` |
-| Live service: 26 checks, then 6 after a restart, all passing | `docs/evidence/live-verification.json`, `live-verification-restart.json` |
+| CI on GitHub Actions (Linux): typecheck, build, both test suites, browser tests, dependency audit, Docker build and smoke | [Run 43292608989](https://github.com/abuzaro21/caveat/actions/runs/43292608989), plus a local clean-clone run in `docs/evidence/local-ci.log` |
+| Live service: 26 checks, then 6 after a restart, all passing; desktop browser suite 11/11 against the live URL | `docs/evidence/live-verification.json`, `live-verification-restart.json` |
 | Five Codex adversarial reviews, each finding fixed with a regression test | [reviews/](reviews/) |
 
 **Limits, stated on every receipt.** Copies made outside CAVEAT before the forget cannot be erased, only refused if someone brings them back. On PostgreSQL, deleted bytes can remain in database pages until vacuum, in the write-ahead log, and in the provider's backups. A retrieval that finished before the forget may already have shown the memory.

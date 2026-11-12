@@ -1,7 +1,7 @@
 {
   "base": "https://caveat.onrender.com",
   "phase": "--before-restart",
-  "at": "2026-11-12T19:27:15.138Z",
+  "at": "2026-11-12T19:41:57.116Z",
   "passed": 26,
   "total": 26,
   "results": [
@@ -28,7 +28,7 @@
     {
       "name": "health endpoint, PostgreSQL store",
       "ok": true,
-      "detail": "{\"ok\":true,\"store\":\"postgres\",\"sessions\":0}"
+      "detail": "{\"ok\":true,\"store\":\"postgres\",\"sessions\":15}"
     },
     {
       "name": "A: retrieval answers from memory",

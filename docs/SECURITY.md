@@ -40,6 +40,7 @@ CAVEAT is a public demo with no accounts and no real personal data. The threat m
 | 4 | Same | No HIGH. Review-3 items 1 and 2 closed, item 3 partial. 2 MEDIUM findings: false page-proof failures on the interface's own wording, and evidence ids left in old ingest audit entries | All fixed. [Response](reviews/codex-review-4-response.md) |
 | — | Found by Claude while capturing the film | Booking audit entries kept the evidence ids a booking relied on, so a forgotten record's id outlived it | Fixed, with a migration, an id scan in the receipt, test R5-1 and e2e C4. [Response](reviews/codex-review-4-response.md) |
 | 5 | Same, final release review | 1 MEDIUM: with no distinctive terms, the receipt skipped its table and id scans (10 checks, not 14) | Fixed: the scans always run, test R5-2. [Response](reviews/codex-review-5-response.md) |
+| — | Found by GitHub Actions on Linux, after publishing | A backslash in a static path (`/%2e%2e%5chelpers.ts`) got 404 on Linux and 400 on Windows. Nothing leaked: on Linux it named a missing file inside the public directory. | Backslashes are now refused with 400 on every platform. R1-7 passes on Linux and Windows. |
 
 ## Known limits
 

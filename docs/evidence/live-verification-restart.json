@@ -1,9 +1,9 @@
 {
   "base": "https://caveat.onrender.com",
   "phase": "--after-restart",
-  "at": "2026-11-12T19:28:08.158Z",
+  "at": "2026-11-12T19:42:34.174Z",
   "passed": 6,
-  "total": 6,
+  "total": 7,
   "results": [
     {
       "name": "restart: service healthy on PostgreSQL",
@@ -32,8 +32,15 @@
     },
     {
       "name": "rate limit: forged X-Forwarded-For is ignored (429 within 300 + earlier calls)",
+      "ok": false,
+      "detail": "first 429 at request 318",
+      "note": "First attempt invalid: the rate-limit window had been started by health polling before the burst and reset during it (18 + 300 = 318). The script now waits 61 s for a fresh window."
+    },
+    {
+      "name": "rate limit (retest from a fresh 60 s window): forged X-Forwarded-For is ignored, the 301st request is refused",
       "ok": true,
-      "detail": "first 429 at request 295"
+      "detail": "first 429 at request 301, burst took 25.0 s"
     }
-  ]
+  ],
+  "summary": "6 of 6 behaviours verified; the rate-limit check passed on retest"
 }

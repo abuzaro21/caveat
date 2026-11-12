@@ -2,7 +2,7 @@
 
 ## Status
 
-**Live at https://caveat.onrender.com**, deployed on 12 Nov 2026 from commit `d6fc53c`. Its application code is identical to the release candidate `2361932` that passed the full local CI.
+**Live at https://caveat.onrender.com**, running commit `4561f02` (deployed 12 Nov 2026). GitHub Actions passed on that commit ([run 43292608989](https://github.com/abuzaro21/caveat/actions/runs/43292608989)). The first deploy was `d6fc53c`, and data persisted across the redeploy.
 
 | Resource | Id | Plan | Region | Workspace |
 |---|---|---|---|---|
@@ -20,7 +20,7 @@ The resources were created with the Render CLI rather than the Blueprint, with t
 
 ### Verified on the live service
 
-`scripts/verify-live.mjs` checked 26 behaviours, then 6 more after a restart of the service, and all 32 passed:
+`scripts/verify-live.mjs` checked 26 behaviours on `4561f02`, then 6 more after a restart of the service. All 32 passed, the rate-limit check on its second attempt (see the last item):
 
 - HTTPS, HSTS, CSP, and the HTTP-to-HTTPS redirect;
 - health on PostgreSQL;
@@ -30,7 +30,7 @@ The resources were created with the Render CLI rather than the Blueprint, with t
 - ingestion and retrieval of a new memory;
 - session isolation;
 - restart recovery;
-- the proxy-hop rate limit: forged `X-Forwarded-For` values hit HTTP 429 at request 295, so `CAVEAT_TRUST_PROXY_HOPS=3` is correct.
+- the proxy-hop rate limit: from a fresh 60 s window, 330 requests with forged `X-Forwarded-For` values were refused from exactly request 301, so they shared one bucket and `CAVEAT_TRUST_PROXY_HOPS=3` is correct. The first attempt after the restart reported request 318, because health polling had already opened the window and it reset during the burst. The script now waits for a fresh window.
 
 The Playwright desktop suite passed 11 of 11 against the live URL (`docs/evidence/live-e2e.log`). The service logs hold no secrets, connection strings, cookies or memory content. Evidence is in `docs/evidence/live-*`.
 

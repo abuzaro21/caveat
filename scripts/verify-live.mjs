@@ -106,13 +106,15 @@ if (mode !== '--after-restart') {
 }
 
 if (RATE) {
-  // Proxy hops: forged left-most X-Forwarded-For values must not create new rate-limit buckets
+  // Proxy hops: forged left-most X-Forwarded-For values must not create new rate-limit buckets.
+  // Wait out the current 60 s window first, so the burst starts a fresh one and the 301st request must be refused.
+  await new Promise((r) => setTimeout(r, 61_000));
   let first429 = 0;
   for (let i = 1; i <= 330 && !first429; i++) {
     const r = await fetch(BASE + '/api/health', { headers: { 'x-forwarded-for': `203.0.113.${i % 250}, 198.51.100.${i % 200}` } });
     if (r.status === 429) first429 = i;
   }
-  check('rate limit: forged X-Forwarded-For is ignored (429 within 300 + earlier calls)', first429 > 0 && first429 <= 301, `first 429 at request ${first429}`);
+  check('rate limit: forged X-Forwarded-For is ignored (one bucket: the 301st request is refused)', first429 === 301, `first 429 at request ${first429}`);
 }
 
 const out = { base: BASE, phase: mode ?? 'full', at: new Date().toISOString(), passed: results.filter((r) => r.ok).length, total: results.length, results };

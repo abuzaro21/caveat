@@ -10,7 +10,7 @@ Last updated: 12 Nov 2026. This file records what is done, what is verified, and
 | Tests on SQLite and on PostgreSQL 16 | 65/65 on each (`docs/evidence/`) |
 | Browser tests, desktop and mobile | 22/22 Playwright (`docs/evidence/e2e.log`) |
 | UI: assistant, evidence panel, memory inspector, forget dialog, guided demo, naive control | `ui/src/` |
-| Clean-clone CI of the release candidate `2361932`: typecheck, build, both test suites, browser tests, `npm audit` (0 vulnerabilities), Docker build and smoke test (non-root image) | `docs/evidence/local-ci.log`: all jobs passed |
+| CI on GitHub Actions (Linux) for `4561f02`: typecheck, build, SQLite tests, PostgreSQL 16 tests, browser tests (desktop and mobile), dependency audit, Docker build and smoke test | [Run 43292608989](https://github.com/abuzaro21/caveat/actions/runs/43292608989): all steps passed. The same jobs also passed from a clean clone locally on Windows (`docs/evidence/local-ci.log`, for `2361932`). |
 | Independent architectures (Claude A, Codex B) | `docs/reviews/claude-architecture-A.md`, `codex-architecture-B.md`, [ARCHITECTURE-DECISIONS.md](ARCHITECTURE-DECISIONS.md) |
 | Codex adversarial reviews 1–5, every finding fixed with a regression test. One further defect, found by Claude while filming, also fixed (R5-1). | `docs/reviews/`. Review 5 was the final release review. Its one fix (R5-2) has not been re-reviewed by Codex. |
 | Public repository | https://github.com/abuzaro21/caveat. A secret and history scan was done before publishing, and an anonymous clean clone installs, builds and passes 65/65. |
@@ -23,7 +23,7 @@ Last updated: 12 Nov 2026. This file records what is done, what is verified, and
 
 | Item | State |
 |---|---|
-| GitHub Actions | **BLOCKED BY ACCOUNT BILLING.** Run 43253312033: "The job was not started because recent account payments have failed or your spending limit needs to be increased." No billing settings were changed, and no self-hosted runner was added. The same jobs ran from a clean clone locally (`docs/evidence/local-ci.log`). |
+| GitHub Actions history | While the repository was private, runs did not start (run 43253312033: "recent account payments have failed or your spending limit needs to be increased"). No billing settings were changed and no self-hosted runner was added. Since the repository became public, Actions runs, and it passes on `4561f02`. |
 | Free PostgreSQL | Expires 12 Dec 2026, followed by a 14-day grace period. See [DEPLOY.md](DEPLOY.md). |
 | `pg` deprecation warning in the service log | Two count queries share one client concurrently (`state()` in `src/memory.ts`). `pg` 8.23.1 (pinned) queues them, so results are correct. Rewrite them as sequential queries before any upgrade to `pg` 9. Severity: LOW. |
 | Human review of the film | Not done. Only the automated checks and the Whisper transcript exist. |
