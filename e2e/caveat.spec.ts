@@ -56,7 +56,8 @@ test('C: forgetting is verified, survives a reload, and an old backup and a stal
   await expect(dialog).toContainText('Forgotten, and verified');
   await expect(dialog.locator('.checks .fail')).toHaveCount(0);
   await dialog.getByRole('button', { name: 'Run the proofs' }).click();
-  await expect(dialog.locator('.proof-pass')).toHaveCount(5, { timeout: 20_000 });
+  await expect(dialog.locator('.proof-pass')).toHaveCount(6, { timeout: 20_000 });
+  await expect(dialog.locator('.proof-fail')).toHaveCount(0);
   await dialog.getByRole('button', { name: 'Close' }).click();
   await expect(page.locator('body')).not.toContainText(/Harbour|Physio|Flores/);
   await page.reload();
@@ -65,6 +66,31 @@ test('C: forgetting is verified, survives a reload, and an old backup and a stal
   await expect(page.locator('.inspector')).not.toContainText(/Harbour|Physio|Flores/);
   await page.getByRole('tab', { name: /Forgotten/ }).click();
   await expect(page.locator('.mem-forgotten')).toContainText('Private recurring location');
+  expect(errors).toEqual([]);
+});
+
+// Codex review 2, finding 1: a short, common-looking memory ("Gym") must not survive in the page after it is forgotten.
+test('C2: a relearned short memory, once forgotten, is gone from the page too, and the page proof checks it', async ({ page }) => {
+  const errors = await open(page);
+  await guide(page, 'Forget the private location').click();
+  let dialog = page.getByRole('dialog');
+  await dialog.getByRole('radio', { name: /may relearn/ }).click();
+  await dialog.getByRole('button', { name: 'Forget it' }).click();
+  await expect(dialog).toContainText('Forgotten, and verified');
+  await dialog.getByRole('button', { name: 'Close' }).click();
+  const told = await page.request.post('/api/tell', { data: { predicate: 'location.private', value: { label: 'Gym', day: 'fri', from: 15, to: 17 }, excerpt: 'Gym' } });
+  expect(told.ok()).toBe(true);
+  await page.getByRole('button', { name: 'Where am I on Friday afternoon?' }).click();
+  await expect(page.locator('.msg-caveat').last()).toContainText('Gym');
+  await guide(page, 'Forget the private location').click();
+  dialog = page.getByRole('dialog');
+  await dialog.getByRole('button', { name: 'Forget it' }).click();
+  await expect(dialog).toContainText('Forgotten, and verified');
+  await dialog.getByRole('button', { name: 'Run the proofs' }).click();
+  await expect(dialog.locator('.proof-pass')).toHaveCount(6, { timeout: 20_000 });
+  await expect(dialog.locator('.proof-fail')).toHaveCount(0);
+  await dialog.getByRole('button', { name: 'Close' }).click();
+  await expect(page.locator('body')).not.toContainText(/\bGym\b/);
   expect(errors).toEqual([]);
 });
 

@@ -1,7 +1,7 @@
 // The memory service: write path, retrieval, the forgetting coordinator, retention, import/export and the delayed
 // worker. Every operation is scoped to one session (a synthetic household); every mutation locks that session row.
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
-import type { Db, Q } from './db.ts';
+import { LEGACY_DEP, type Db, type Q } from './db.ts';
 import {
   DAY, PREDICATES, SUBJECTS, isPredicate, scopeKey, validateValue, valueLabel,
   type Evidence, type PredicateId, type Purpose, type Scope, type SourceKind, type Stance, type SubjectId,
@@ -395,7 +395,7 @@ export class Caveat {
     for (const b of await q.all<Row>('SELECT id, evidence_ids, parts, slot_start, slot_end FROM bookings WHERE session = ?', [sid])) {
       const evs = JSON.parse(b.evidence_ids) as string[];
       const parts = JSON.parse(b.parts) as BookingPart[];
-      const hit = (x: BookingPart) => x.deps.some((d) => ids.includes(d));
+      const hit = (x: BookingPart) => x.deps.some((d) => d === LEGACY_DEP || ids.includes(d));
       if (!evs.some((x) => ids.includes(x)) && !parts.some(hit)) continue;
       const next = parts.map((x) => (!hit(x) ? x : { key: x.key, deps: [], text: x.key === 'window' ? `${new Date(b.slot_start).getUTCHours()}:00–${new Date(b.slot_end).getUTCHours()}:00` : REMOVED }));
       await q.run('UPDATE bookings SET evidence_ids = ?, window_label = ?, reason = ?, parts = ? WHERE session = ? AND id = ?',
@@ -412,7 +412,7 @@ export class Caveat {
     await this.db.tx(null, async (q) => {
       add('Evidence rows for this topic', '0', (await q.all<{ n: number }>('SELECT count(*) AS n FROM evidence WHERE session = ? AND subject = ? AND predicate = ?', [sid, subject, predicate]))[0].n);
       add('Index entries pointing at deleted evidence', '0', (await q.all<{ n: number }>('SELECT count(*) AS n FROM memory_index i LEFT JOIN evidence e ON e.session = i.session AND e.id = i.evidence_id WHERE i.session = ? AND e.id IS NULL', [sid]))[0].n);
-      add('Booking text derived from deleted evidence', '0', (await q.all<Row>('SELECT parts FROM bookings WHERE session = ?', [sid])).flatMap((r) => JSON.parse(r.parts) as BookingPart[]).filter((x) => x.deps.some((d) => doomedIds.includes(d))).length);
+      add('Booking text derived from deleted evidence', '0', (await q.all<Row>('SELECT parts FROM bookings WHERE session = ?', [sid])).flatMap((r) => JSON.parse(r.parts) as BookingPart[]).filter((x) => x.deps.some((d) => d === LEGACY_DEP || doomedIds.includes(d))).length);
       add('Usage records pointing at deleted evidence', '0', (await q.all<{ n: number }>('SELECT count(*) AS n FROM uses u LEFT JOIN evidence e ON e.session = u.session AND e.id = u.evidence_id WHERE u.session = ? AND e.id IS NULL', [sid]))[0].n);
       if (markers.length) {
         const ph = markers.map(() => '?').join(',');

@@ -49,6 +49,15 @@ CREATE TABLE IF NOT EXISTS receipts (session TEXT NOT NULL REFERENCES sessions(i
 CREATE TABLE IF NOT EXISTS audit (session TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE, seq BIGINT NOT NULL,
   at BIGINT NOT NULL, real_at BIGINT NOT NULL, op TEXT NOT NULL, detail TEXT NOT NULL, PRIMARY KEY (session, seq));
 `;
+/** A dependency that matches every forget. Bookings written before reasons were tracked per part get it, so the
+ *  first forget or retention purge rewrites their explanation instead of leaving untracked text behind. */
+export const LEGACY_DEP = '*legacy*';
+export const legacyParts = (windowLabel: string, reason: string) =>
+  JSON.stringify([{ key: 'window', text: windowLabel, deps: [LEGACY_DEP] }, { key: 'legacy', text: reason, deps: [LEGACY_DEP] }]);
+type LegacyRow = { session: string; id: string; window_label: string; reason: string };
+const BACKFILL_SELECT = "SELECT session, id, window_label, reason FROM bookings WHERE parts = ''";
+const BACKFILL_UPDATE = 'UPDATE bookings SET parts = ? WHERE session = ? AND id = ?';
+
 /** Every table that can hold session data, for verification scans. */
 export const TABLES = ['evidence', 'memory_index', 'summaries', 'uses', 'bookings', 'tombstones', 'receipts', 'audit'] as const;
 
@@ -68,6 +77,10 @@ export class SqliteDb implements Db {
     this.db = new DatabaseSync(path);
     this.db.exec('PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON; PRAGMA secure_delete = ON;');
     this.db.exec(DDL);
+    // Migration: databases created before bookings.parts existed. Runs before any request is served.
+    const cols = this.db.prepare('PRAGMA table_info(bookings)').all() as { name: string }[];
+    if (!cols.some((c) => c.name === 'parts')) this.db.exec("ALTER TABLE bookings ADD COLUMN parts TEXT NOT NULL DEFAULT ''");
+    for (const r of this.db.prepare(BACKFILL_SELECT).all() as LegacyRow[]) this.db.prepare(BACKFILL_UPDATE).run(legacyParts(r.window_label, r.reason), r.session, r.id);
   }
   tx<T>(_lock: string | null, fn: (q: Q) => Promise<T>): Promise<T> {
     const run = async () => {
@@ -101,7 +114,11 @@ export class PgDb implements Db {
     const pool = new pg.Pool({ connectionString: url, max: 5, ssl: /sslmode=require|render\.com/.test(url) ? { rejectUnauthorized: false } : undefined });
     pool.on('connect', (c) => { c.query(`SET search_path TO ${schema}`).catch(() => {}); });
     const c = await pool.connect();
-    try { await c.query(`CREATE SCHEMA IF NOT EXISTS ${schema}`); await c.query(`SET search_path TO ${schema}`); await c.query(DDL); } finally { c.release(); }
+    try { await c.query(`CREATE SCHEMA IF NOT EXISTS ${schema}`); await c.query(`SET search_path TO ${schema}`); await c.query(DDL);
+      // Migration: databases created before bookings.parts existed. Runs before any request is served.
+      await c.query("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS parts TEXT NOT NULL DEFAULT ''");
+      for (const r of (await c.query(BACKFILL_SELECT)).rows as LegacyRow[]) await c.query('UPDATE bookings SET parts = $1 WHERE session = $2 AND id = $3', [legacyParts(r.window_label, r.reason), r.session, r.id]);
+    } finally { c.release(); }
     return new PgDb(pool);
   }
   async tx<T>(lock: string | null, fn: (q: Q) => Promise<T>): Promise<T> {

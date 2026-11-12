@@ -21,9 +21,9 @@ const PROBE: Record<string, string> = {
 };
 const SUGGESTIONS = ['When should deliveries come to my home?', 'Which days am I in the office?', 'Where am I on Friday afternoon?', 'What do you remember about me?'];
 const COMMON = new Set(['mornings', 'afternoons', 'evenings', 'morning', 'afternoon', 'evening', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'fridays', 'confirmed', 'correction', 'delivery', 'deliveries', 'window', 'from', 'with', 'that', 'this', 'there', 'your', 'have', 'about', 'office', 'home']);
-const words = (s: string) => s.toLowerCase().normalize('NFKD').replace(/[^\p{L}\p{N}\s]/gu, ' ').split(/\s+/).filter((w) => w.length >= 4 && !/^\d+$/.test(w));
+const words = (s: string) => s.toLowerCase().normalize('NFKD').replace(/[^\p{L}\p{N}\s]/gu, ' ').split(/\s+/).filter((w) => w.length >= 3 && !/^\d+$/.test(w));
 
-/** Words that only the doomed memory contains: used to redact the local transcript and to check the proofs. */
+/** Words that only the doomed memory contains: a secondary check in the proofs (the exact phrases below are primary). */
 function markersOf(target: Memory, state: State): string[] {
   const mine = new Set<string>();
   for (const c of target.decision.considered) if (c.role !== 'out-of-scope') { words(c.excerpt).forEach((w) => mine.add(w)); words(c.valueLabel).forEach((w) => mine.add(w)); }
@@ -32,7 +32,18 @@ function markersOf(target: Memory, state: State): string[] {
   const others = new Set(words(JSON.stringify(rest)));
   return [...mine].filter((w) => !others.has(w) && !COMMON.has(w));
 }
-const leaks = (x: unknown, markers: string[]) => { const t = JSON.stringify(x).toLowerCase(); return markers.filter((m) => t.includes(m)); };
+/** The memory's own text, verbatim: every value label and excerpt behind it, checked as whole phrases. */
+function contentOf(target: Memory): string[] {
+  const out = new Set<string>();
+  const add = (t: unknown) => { if (typeof t === 'string' && t.trim().length >= 3) out.add(JSON.stringify(t.trim().toLowerCase()).slice(1, -1)); };
+  for (const c of target.decision.considered) if (c.role !== 'out-of-scope') { add(c.excerpt); add(c.valueLabel); }
+  const v = target.decision.value as { label?: unknown } | null | undefined;
+  if (v && typeof v === 'object') add(v.label);
+  return [...out];
+}
+type Needles = { content: string[]; markers: string[] };
+const leaks = (x: unknown, n: Needles) => { const t = JSON.stringify(x ?? null).toLowerCase(); return [...n.content, ...n.markers].filter((m) => t.includes(m)); };
+const describe = (l: string[]) => l.map((w) => (w.length > 24 ? `${w.slice(0, 24)}…` : w)).join(', ');
 
 export function App() {
   const [state, setState] = useState<State | null>(null);
@@ -50,7 +61,10 @@ export function App() {
   const [proofs, setProofs] = useState<Proof[]>([]);
   const [backup, setBackup] = useState<{ envelope: unknown; items: number } | null>(null);
   const [theme, setTheme] = useState<'dark' | 'light'>(() => { try { return (localStorage.getItem('caveat-theme') as 'light') || 'dark'; } catch { return 'dark'; } });
-  const markersRef = useRef<string[]>([]);
+  const markersRef = useRef<Needles>({ content: [], markers: [] });
+  // Mirrors of what this page holds, so the page proof reads live state rather than a stale closure.
+  const heldRef = useRef<{ msgs: Msg[]; focus: unknown; naive: unknown }>({ msgs: [], focus: null, naive: null });
+  heldRef.current = { msgs, focus, naive };
   const nextId = useRef(1);
   const chatEnd = useRef<HTMLDivElement>(null);
 
@@ -132,13 +146,14 @@ export function App() {
 
   async function reset() {
     const s = await run(() => api.reset()); if (!s) return;
-    setState(s); setMsgs([]); setFocus(null); setNaive(null); setDone({}); setReceipt(null); setProofs([]); setBackup(null); markersRef.current = [];
+    setState(s); setMsgs([]); setFocus(null); setNaive(null); setDone({}); setReceipt(null); setProofs([]); setBackup(null); markersRef.current = { content: [], markers: [] };
     push({ who: 'caveat', text: 'Fresh start: a new isolated session with the original fictional memories. The old session and everything in it were deleted.' });
   }
 
   async function confirmForget(mode: 'block' | 'before') {
     const target = forgetTarget; if (!target || !state) return;
     const markers = markersOf(target, state);
+    const content = contentOf(target);
     const r = await run(async () => {
       // Make the two copies that forgetting usually misses: a backup outside CAVEAT, and a job that already read the memory.
       const env = await api.exportEnvelope();
@@ -149,7 +164,7 @@ export function App() {
     if (!r) return;
     // The receipt is content-free by design: any word it shares with the memory is fixed vocabulary.
     const receiptWords = new Set(words(JSON.stringify(r.rec)));
-    markersRef.current = markers.filter((w) => !receiptWords.has(w));
+    markersRef.current = { content, markers: markers.filter((w) => !receiptWords.has(w)) };
     setBackup({ envelope: r.env, items: (r.env as { items: unknown[] }).items.length });
     setForgetTarget(null); setReceipt(r.rec);
     setProofs([
@@ -158,10 +173,12 @@ export function App() {
       { id: 'export', label: 'Export now: the new export must not contain it', status: 'pending' },
       { id: 'import', label: 'Restore the old backup taken before the forget', status: 'pending' },
       { id: 'worker', label: 'Release the delayed job queued before the forget', status: 'pending' },
+      { id: 'page', label: 'This page: nothing shown or held in this tab still quotes it', status: 'pending' },
     ]);
-    // Redact this browser's own transcript too: the server forgot, the page should not keep quoting it.
-    setMsgs((xs) => xs.map((m) => (leaks([m.text, m.decision, m.booking], markersRef.current).length ? { id: m.id, who: m.who, text: 'Removed from this conversation because you asked me to forget it.', redacted: true } : m)));
-    if (focus && focus.d.predicate === target.predicate) setFocus(null);
+    // The page forgets too. Any earlier message, card or panel may have quoted the memory or been shaped by it, so the
+    // transcript, the focused evidence and the naive panel are dropped whole rather than redacted word by word.
+    setMsgs([]); setFocus(null); setNaive(null);
+    push({ who: 'system', text: 'I cleared this conversation and the evidence panel: earlier messages may have quoted or relied on the memory you asked me to forget.' });
     push({ who: 'system', text: `Forgotten: ${r.rec.request.topic}. Receipt ${r.rec.id}, ${r.rec.verification.filter((v) => v.pass).length}/${r.rec.verification.length} verification checks passed.` });
     if (target.predicate === 'location.private') mark('c1');
     await refresh();
@@ -182,31 +199,38 @@ export function App() {
       await step('ask', async () => {
         const a = await api.ask(PROBE[predicate] ?? 'What do you remember about me?');
         const l = leaks(a, markers);
-        return { pass: l.length === 0, detail: l.length ? `leaked: ${l.join(', ')}` : `“${a.reply}”` };
+        return { pass: l.length === 0, detail: l.length ? `leaked: ${describe(l)}` : `“${a.reply}”` };
       });
       await step('reload', async () => {
         const r = await api.reload(); const l = leaks(r.state, markers);
         setState(r.state);
-        return { pass: l.length === 0, detail: `${r.cacheEntriesDropped} cached decision(s) dropped; rebuilt state ${l.length ? `leaked: ${l.join(', ')}` : 'has no trace of it'}` };
+        return { pass: l.length === 0, detail: `${r.cacheEntriesDropped} cached decision(s) dropped; rebuilt state ${l.length ? `leaked: ${describe(l)}` : 'has no trace of it'}` };
       });
       await step('export', async () => {
         const e = await api.exportEnvelope(); const l = leaks(e, markers);
-        return { pass: l.length === 0, detail: `${(e as { items: unknown[] }).items.length} records exported, ${l.length ? `leaked: ${l.join(', ')}` : 'none about it'}` };
+        return { pass: l.length === 0, detail: `${(e as { items: unknown[] }).items.length} records exported, ${l.length ? `leaked: ${describe(l)}` : 'none about it'}` };
       });
       await step('import', async () => {
         if (!backup) return { pass: false, detail: 'no backup was taken' };
         const r = await api.importEnvelope(backup.envelope);
+        setBackup(null); // the tab's copy has served its purpose; keeping it would be keeping the memory
         const s = await api.state(); setState(s);
         const rejected = r.results.filter((x) => x.status === 'rejected');
         const l = leaks(s, markers);
         const why = [...new Set(rejected.map((x) => x.reason))].join('; ');
-        return { pass: l.length === 0, detail: `${r.signed ? 'signed backup' : 'unsigned backup'}: ${rejected.length} record(s) refused${why ? ` (${why})` : ''}, ${r.results.filter((x) => x.status === 'duplicate').length} unchanged; ${l.length ? `leaked: ${l.join(', ')}` : 'nothing came back'}` };
+        return { pass: l.length === 0, detail: `${r.signed ? 'signed backup' : 'unsigned backup'}: ${rejected.length} record(s) refused${why ? ` (${why})` : ''}, ${r.results.filter((x) => x.status === 'duplicate').length} unchanged; ${l.length ? `leaked: ${describe(l)}` : 'nothing came back'}. The tab's copy is now discarded.` };
       });
       await step('worker', async () => {
         try {
           const w = await api.releaseWorker(); const s = await api.state(); setState(s); const l = leaks(s, markers);
           return { pass: !w.written && l.length === 0, detail: w.reason };
         } catch (e) { if (e instanceof ApiError && e.status === 404) return { pass: true, detail: 'the job was already released and fenced' }; throw e; }
+      });
+      await step('page', async () => {
+        if (!markers.content.length) return { pass: false, detail: 'nothing to check against: the memory had no text to look for' };
+        const held = heldRef.current;
+        const l = leaks({ msgs: held.msgs, focus: held.focus, naive: held.naive }, markers);
+        return { pass: l.length === 0, detail: `${held.msgs.length} message(s), the evidence panel and the naive panel searched for ${markers.content.length} exact phrase(s) and ${markers.markers.length} distinctive word(s): ${l.length ? `still shown: ${describe(l)}` : 'none found'}` };
       });
       if (predicate === 'location.private') mark('c2');
     } finally { setBusy(false); }

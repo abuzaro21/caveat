@@ -59,8 +59,12 @@ export function plan(all: Evidence[], tombs: Tombstone[], task: TaskId, now: num
       skipped.push({ label: slotLabel(start, end), reason: `you are usually at ${pv.label} on ${DAY_NAMES[k]}s ${pv.from}:00–${pv.to}:00`, deps: privacy.evidenceIds });
       continue;
     }
-    // A hold is checked against the delivery slot itself, not only against today: a future hold blocks future slots.
-    const held = [start, end - 1].map((at) => evaluate(all, tombs, { actor: 'maya', subject: 'maya', predicate: 'delivery.hold', purpose: 'action', now: at })).find((h) => h.value === true);
+    // A hold is checked against the whole delivery slot, not only against today: at both ends, and at every moment
+    // inside the slot where a hold's validity starts or ends, so a hold wholly inside the slot also blocks it.
+    const inside = (t: number | null) => t !== null && t > start && t < end;
+    const points = new Set([start, end - 1]);
+    for (const e of all) if (e.predicate === 'delivery.hold') for (const b of [e.validFrom, e.validUntil]) if (inside(b)) { points.add(b!); points.add(b! - 1); }
+    const held = [...points].sort((a, b) => a - b).map((at) => evaluate(all, tombs, { actor: 'maya', subject: 'maya', predicate: 'delivery.hold', purpose: 'action', now: at })).find((h) => h.value === true);
     if (held) {
       skipped.push({ label: slotLabel(start, end), reason: 'your deliveries are on hold then', deps: held.considered.filter((c) => c.role === 'leader' || c.role === 'supports').map((c) => c.id) });
       continue;
