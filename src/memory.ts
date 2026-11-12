@@ -416,19 +416,21 @@ export class Caveat {
       add('Index entries pointing at deleted evidence', '0', (await q.all<{ n: number }>('SELECT count(*) AS n FROM memory_index i LEFT JOIN evidence e ON e.session = i.session AND e.id = i.evidence_id WHERE i.session = ? AND e.id IS NULL', [sid]))[0].n);
       add('Booking text derived from deleted evidence', '0', (await q.all<Row>('SELECT parts FROM bookings WHERE session = ?', [sid])).flatMap((r) => JSON.parse(r.parts) as BookingPart[]).filter((x) => x.deps.some((d) => d === LEGACY_DEP || doomedIds.includes(d))).length);
       add('Usage records pointing at deleted evidence', '0', (await q.all<{ n: number }>('SELECT count(*) AS n FROM uses u LEFT JOIN evidence e ON e.session = u.session AND e.id = u.evidence_id WHERE u.session = ? AND e.id IS NULL', [sid]))[0].n);
+      // The index check needs distinctive terms; a memory made only of ordinary words ("Home") has none, and says so.
       if (markers.length) {
         const ph = markers.map(() => '?').join(',');
         add('Distinctive terms left in the search index', '0', (await q.all<{ n: number }>(`SELECT count(*) AS n FROM memory_index WHERE session = ? AND term IN (${ph})`, [sid, ...markers]))[0].n);
-        const texts = [
-          ...(await q.all<Row>('SELECT text AS t FROM summaries WHERE session = ?', [sid])).map((r) => ['summaries', r.t]),
-          ...(await q.all<Row>('SELECT reason, evidence_ids FROM bookings WHERE session = ?', [sid])).map((r) => ['bookings', `${r.reason} ${r.evidence_ids}`]),
-          ...(await q.all<Row>('SELECT detail AS t FROM audit WHERE session = ?', [sid])).map((r) => ['audit', r.t]),
-          ...(await q.all<Row>('SELECT body AS t FROM receipts WHERE session = ?', [sid])).map((r) => ['receipts', r.t]),
-        ];
-        // Content is its distinctive terms; the deleted records' ids count too, because an id must not outlive its evidence.
-        for (const table of ['summaries', 'bookings', 'audit', 'receipts'])
-          add(`Deleted content in ${table}`, '0', texts.filter(([tb, t]) => tb === table && (markers.some((m) => terms(String(t)).includes(m)) || doomedIds.some((id) => String(t).includes(id)))).length);
-      } else add('Distinctive-term scan', 'skipped', 'skipped');
+      } else add('Distinctive terms left in the search index', 'none to check', 'none to check');
+      // The table scans always run (Codex review 5): the deleted records' ids are checked even when there are no
+      // distinctive terms, because an id must not outlive its evidence.
+      const texts = [
+        ...(await q.all<Row>('SELECT text AS t FROM summaries WHERE session = ?', [sid])).map((r) => ['summaries', r.t]),
+        ...(await q.all<Row>('SELECT reason, evidence_ids FROM bookings WHERE session = ?', [sid])).map((r) => ['bookings', `${r.reason} ${r.evidence_ids}`]),
+        ...(await q.all<Row>('SELECT detail AS t FROM audit WHERE session = ?', [sid])).map((r) => ['audit', r.t]),
+        ...(await q.all<Row>('SELECT body AS t FROM receipts WHERE session = ?', [sid])).map((r) => ['receipts', r.t]),
+      ];
+      for (const table of ['summaries', 'bookings', 'audit', 'receipts'])
+        add(`Deleted content in ${table}`, '0', texts.filter(([tb, t]) => tb === table && (markers.some((m) => terms(String(t)).includes(m)) || doomedIds.some((id) => String(t).includes(id)))).length);
       add('Tombstone holds no content', 'true', String(Object.keys((await q.all<Row>('SELECT * FROM tombstones WHERE session = ? AND predicate = ?', [sid, predicate]))[0] ?? {}).every((k) => ['session', 'subject', 'predicate', 'mode', 'revoked_at', 'revision'].includes(k))));
     });
     const exp = JSON.stringify(await this.exportEnvelope(sid));

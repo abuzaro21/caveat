@@ -157,3 +157,28 @@ test('R5-1: after a booking, forgetting leaves no deleted evidence id anywhere, 
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// Codex review 5: a memory made only of ordinary words ("Home") has no distinctive terms, and the receipt then skipped
+// its table scans, so a deleted id left in the audit log went unchecked. The scans must always run, with 14 checks.
+test('R5-2: the receipt checks for deleted ids even when the memory has no distinctive terms', async () => {
+  const { c, sid } = await makeCaveat();
+  await c.forget(sid, 'maya', 'location.private', 'before');
+  const r = await c.ingest(sid, 'chat', [{ subject: 'maya', predicate: 'location.private', value: { label: 'Home', day: 'fri', from: 15, to: 17 }, excerpt: 'Home' } as never]);
+  const id = r[0]?.id;
+  assert.ok(id, 'an evidence id was stored');
+  // A leftover the migration would normally rewrite, written after open so the verifier is the only defence.
+  await c.db.tx(null, (q) => q.run("UPDATE audit SET detail = ? WHERE session = ? AND op = 'ingest' AND seq = (SELECT MAX(seq) FROM audit WHERE session = ? AND op = 'ingest')",
+    [JSON.stringify({ channel: 'chat', stored: [id], duplicates: 0, rejected: [] }), sid, sid]));
+  const bad = await c.forget(sid, 'maya', 'location.private', 'block') as any;
+  assert.equal(bad.verification.length, 14);
+  assert.equal(bad.verified, false, 'a deleted id left in the audit log must fail verification');
+  assert.ok(bad.verification.some((v: any) => v.check === 'Deleted content in audit' && !v.pass));
+
+  // And a clean forget of the same ordinary-word memory verifies, still with 14 checks.
+  const fresh = await makeCaveat();
+  await fresh.c.forget(fresh.sid, 'maya', 'location.private', 'before');
+  await fresh.c.ingest(fresh.sid, 'chat', [{ subject: 'maya', predicate: 'location.private', value: { label: 'Home', day: 'fri', from: 15, to: 17 }, excerpt: 'Home' } as never]);
+  const ok = await fresh.c.forget(fresh.sid, 'maya', 'location.private', 'block') as any;
+  assert.equal(ok.verification.length, 14);
+  assert.equal(ok.verified, true, JSON.stringify(ok.verification.filter((v: any) => !v.pass)));
+});

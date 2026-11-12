@@ -6,12 +6,12 @@ Last updated: 12 Nov 2026. This file records what is done, what is verified, and
 
 | Item | Evidence |
 |---|---|
-| Memory engine, policy, forgetting, retention, worker, import/export | `src/`; 64 unit and integration tests |
-| Tests on SQLite and on PostgreSQL 16 | 64/64 on each (`docs/evidence/`) |
+| Memory engine, policy, forgetting, retention, worker, import/export | `src/`; 65 unit and integration tests |
+| Tests on SQLite and on PostgreSQL 16 | 65/65 on each (`docs/evidence/`) |
 | Browser tests, desktop and mobile | 22/22 Playwright (`docs/evidence/`) |
 | UI: assistant, evidence panel, memory inspector, forget dialog, guided demo, naive control | `ui/src/` |
 | Independent architectures (Claude A, Codex B) | `docs/reviews/claude-architecture-A.md`, `codex-architecture-B.md`, [ARCHITECTURE-DECISIONS.md](ARCHITECTURE-DECISIONS.md) |
-| Codex adversarial reviews 1–4, all findings fixed with regression tests. One further defect, found by Claude while filming, also fixed (R5-1). The fixes after review 4 have not been re-reviewed by Codex. | `docs/reviews/` |
+| Codex adversarial reviews 1–5, all findings fixed with regression tests. One further defect, found by Claude while filming, also fixed (R5-1). Review 5 was the final release review; its one fix (R5-2) has not been re-reviewed by Codex. | `docs/reviews/` |
 | Docker image builds, runs as non-root, serves the UI and passes health checks | local CI log |
 | Documentation set | README and `docs/` |
 | Film: 87.5 s, 1920×1080, 30 fps, H.264/AAC, narration, burned-in and soft captions, logo ending | `film/`; 12/12 automated checks in `docs/evidence/film-check.json`; `film/contact-sheet.png` |

@@ -41,7 +41,7 @@ After the commit:
 - Purge the decision cache and raise the cache floor.
 - Strip the forgotten ids from any queued job.
 - Compact SQLite storage with `secure_delete` and `wal_checkpoint(TRUNCATE)`.
-- Run 14 verification checks: evidence rows; orphaned index entries; booking text with a dependency on the deleted rows; orphaned usage records; distinctive terms in the index, summaries, bookings, audit and receipts; tombstone columns; a fresh export; the worker inbox; the cache; and retrieval returning ABSTAIN.
+- Run 14 verification checks: evidence rows; orphaned index entries; booking text with a dependency on the deleted rows; orphaned usage records; distinctive terms left in the index (reported as "none to check" when the memory has no distinctive terms); deleted content in summaries, bookings, the audit log and receipts, meaning distinctive terms or the deleted records' ids, checked every time; tombstone columns; a fresh export; the worker inbox; the cache; and retrieval returning ABSTAIN.
 - Issue a **content-free receipt**: what was deleted (counts), what was rewritten, what was kept, every check with expected and actual values, and the limits.
 
 **Scheduled retention** works the same way without anyone asking: courier logs and third-party reports about delivery windows are deleted after 60 virtual days, with their own receipt.

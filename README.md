@@ -49,7 +49,7 @@ Requires Node 24.13 or later (native TypeScript, `node:sqlite`).
 npm ci
 npm run build          # UI -> public/
 npm start              # http://localhost:3000, SQLite in data/
-npm test               # 64 tests: policy, scenarios, adversarial, HTTP, restart, review regressions
+npm test               # 65 tests: policy, scenarios, adversarial, HTTP, restart, review regressions
 npm run test:e2e       # Playwright, desktop + mobile (22 tests)
 ```
 

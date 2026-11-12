@@ -1,0 +1,7 @@
+{
+  "model": "openai/whisper-small.en (local, CPU)",
+  "scriptWords": 192,
+  "heardWords": 189,
+  "wordErrorRate": 0.0312,
+  "heard": "Your assistant remembers you. Does it know when it might be wrong? This is caveat. Every memory carries its source, the strength of its evidence, its freshness and its scope. The household is fictional. In July, Maya said she wants morning deliveries. Since then, the courier has logged three failed mornings. So before booking the sofa, caveat says it might be wrong, and the server refuses to book. She chooses afternoons. That becomes her correction and the booking goes through. A model's guess is shown, but it never wins. A month later, her office days are 113 days old, past their 90-day horizon. So it asks first. One tap, and the memory is fresh again. Now Maya forgets a private appointment. The evidence, its index entries, and the booking text that quoted it are deleted. The receipt lists 14 checks. Then it proves it. Ask again. Reload. Export. Restore the old backup, release a delayed job, search the page itself, nothing comes back. A naive memory, given the same inputs, books on a guess, and its forget only hides the row. Caveat, remember with reasons, forget with proof."
+}
