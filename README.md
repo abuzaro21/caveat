@@ -12,7 +12,8 @@ CAVEAT is agent memory that knows it might be wrong. It does not store "facts". 
 
 When the agent recalls something, CAVEAT recomputes a verdict from that evidence: **Use**, **Use with caveat**, **Ask first**, or **Abstain**. The agent says *"I might be wrong about this."* only when the evidence warrants it. The backend refuses any consequential action that rests on uncertain memory. Forgetting deletes data and proves it: a receipt, fourteen post-commit checks, and six live proofs, including that an old backup and a delayed job cannot bring the memory back and that the page itself no longer shows it.
 
-- **Live demo:** see [docs/DEPLOY.md](docs/DEPLOY.md). It runs on Render's free tier, so the first request after idle can take about 30 s.
+- **Live demo:** https://caveat.onrender.com. It runs on Render's free tier, so the first request after idle can take about 30 s. See [docs/DEPLOY.md](docs/DEPLOY.md).
+- **Film (87 s):** [caveat-film.mp4](https://github.com/abuzaro21/caveat/releases/download/v1.0.0/caveat-film.mp4), attached to release [v1.0.0](https://github.com/abuzaro21/caveat/releases/tag/v1.0.0).
 - **All data is fictional.** Every visitor gets an isolated synthetic household (Maya and Sam) on a virtual clock that starts on Thursday 12 Nov 2026.
 
 ## The three scenarios

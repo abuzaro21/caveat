@@ -1,0 +1,139 @@
+{
+  "base": "https://caveat.onrender.com",
+  "phase": "--before-restart",
+  "at": "2026-11-12T19:27:15.138Z",
+  "passed": 26,
+  "total": 26,
+  "results": [
+    {
+      "name": "HTTPS page loads",
+      "ok": true,
+      "detail": "200"
+    },
+    {
+      "name": "HSTS header",
+      "ok": true,
+      "detail": "max-age=31536000"
+    },
+    {
+      "name": "Content-Security-Policy header",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "plain HTTP is redirected to HTTPS",
+      "ok": true,
+      "detail": "301"
+    },
+    {
+      "name": "health endpoint, PostgreSQL store",
+      "ok": true,
+      "detail": "{\"ok\":true,\"store\":\"postgres\",\"sessions\":0}"
+    },
+    {
+      "name": "A: retrieval answers from memory",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "A: contradiction detected (contested)",
+      "ok": true,
+      "detail": "contested"
+    },
+    {
+      "name": "A: \"I might be wrong about this.\" is said, with the evidence",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "A: backend refuses the booking (409)",
+      "ok": true,
+      "detail": "409"
+    },
+    {
+      "name": "A: the answer is stored as a correction",
+      "ok": true,
+      "detail": "corrected"
+    },
+    {
+      "name": "A: booking goes through after the correction",
+      "ok": true,
+      "detail": "200"
+    },
+    {
+      "name": "B: memory past its horizon is not acted on",
+      "ok": true,
+      "detail": "review-due"
+    },
+    {
+      "name": "B: reconfirming makes it usable again",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "C: the private memory is retrievable before the forget",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "C: forget verified, 14 receipt checks, all passing",
+      "ok": true,
+      "detail": "14/14"
+    },
+    {
+      "name": "C: receipt holds no forgotten content",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "C: asking again abstains",
+      "ok": true,
+      "detail": "ABSTAIN"
+    },
+    {
+      "name": "C: state, bookings and audit hold no trace",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "C: cold reload brings nothing back",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "C: restoring the old backup is refused for that topic",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "C: the delayed job is fenced and writes nothing",
+      "ok": true,
+      "detail": "fenced: the job was planned at revision "
+    },
+    {
+      "name": "C: a fresh export does not contain it",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "ingestion: a new memory is stored",
+      "ok": true,
+      "detail": "stored"
+    },
+    {
+      "name": "retrieval: the new memory is answered",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "isolation: another session is untouched by the forget",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "isolation: no session sees another's data",
+      "ok": true,
+      "detail": ""
+    }
+  ]
+}

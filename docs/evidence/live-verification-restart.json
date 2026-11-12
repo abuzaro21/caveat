@@ -1,0 +1,39 @@
+{
+  "base": "https://caveat.onrender.com",
+  "phase": "--after-restart",
+  "at": "2026-11-12T19:28:08.158Z",
+  "passed": 6,
+  "total": 6,
+  "results": [
+    {
+      "name": "restart: service healthy on PostgreSQL",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "restart: the session survived",
+      "ok": true,
+      "detail": "200"
+    },
+    {
+      "name": "restart: the memory is still forgotten, tombstone kept",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "restart: the old backup is still refused",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "restart: asking still abstains",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "rate limit: forged X-Forwarded-For is ignored (429 within 300 + earlier calls)",
+      "ok": true,
+      "detail": "first 429 at request 295"
+    }
+  ]
+}

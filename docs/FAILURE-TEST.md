@@ -32,6 +32,21 @@ A sofa booking made earlier skipped Friday 13 Nov *because* of this memory, so i
 - **A database from before per-part booking dependencies.** It is migrated on open, and forgetting still deletes and rewrites. (`review2.test.ts` R2-2)
 - **A read racing the forget, and a forget landing between planning and booking.** (`adversarial.test.ts`)
 - **Session isolation.** Forgetting in one visitor's session leaves another's untouched. (e2e)
+- **Ordinary words.** Memories labelled "Home", "Talking" and "Proof" share words with kept records or with the interface itself. Each one still proves cleanly. (e2e "C3", from Codex reviews 3 and 4)
+- **Forgetting after a booking and a stale-memory check.** No deleted id survives in the audit log, and all six proofs pass. (`review2.test.ts` R5-1, e2e "C4")
+- **Audit entries written by older versions.** Ids in old `ingest` and `task.booked` entries are rewritten to counts on open. The receipt fails if one survives, even for a memory with no distinctive words. (`review2.test.ts` R4-2, R5-1, R5-2)
+
+## On the live deployment
+
+`scripts/verify-live.mjs` runs scenario C against the deployed service on Render, with PostgreSQL. It covers forget, receipt (14 of 14 checks), ask again, cold reload, old backup, delayed job and fresh export. It then restarts the service and checks, with the same session cookie, that the memory is still forgotten and the old backup is still refused. Results: [evidence/live-verification.json](evidence/live-verification.json) and [evidence/live-verification-restart.json](evidence/live-verification-restart.json).
+
+## What "forgotten" does not cover
+
+The receipt states these limits, and so does [PRIVACY-AND-FORGETTING.md](PRIVACY-AND-FORGETTING.md):
+
+- Copies made outside CAVEAT before the forget, such as a downloaded export, a screenshot or an answer already on screen, cannot be erased. They can only be refused if someone tries to bring them back in.
+- On PostgreSQL, deleted rows disappear from queries at once. Their bytes can stay in database pages until vacuum, in the write-ahead log, and in the hosting provider's backups for their retention period. CAVEAT cannot purge provider backups. The byte-level scan of the storage file is done for SQLite only.
+- A retrieval that finished before the forget may already have shown the memory.
 
 ## Negative control
 
@@ -41,7 +56,8 @@ The naive baseline runs the same steps. Its forget sets a hidden flag, so the se
 
 ```bash
 npm test                 # includes scenarios, restart, adversarial, review-1 and review-2 regressions
-npx playwright test      # C and C2 in a real browser, desktop and mobile
+npx playwright test      # C, C2, C3 and C4 in a real browser, desktop and mobile
+node scripts/verify-live.mjs https://caveat.onrender.com   # against the deployment (see DEPLOY.md)
 ```
 
 The test logs from this build are in [evidence/](evidence/).

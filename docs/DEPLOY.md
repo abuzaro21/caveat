@@ -2,12 +2,37 @@
 
 ## Status
 
-**Not deployed yet.** Two things the owner has to do are blocking it:
+**Live at https://caveat.onrender.com**, deployed on 12 Nov 2026 from commit `d6fc53c`. Its application code is identical to the release candidate `2361932` that passed the full local CI.
 
-1. **An isolated Render workspace.** None exists for CAVEAT. Every existing workspace belongs to another project (agent-trust, decide-demo, KEEL, WATCHSHIFT), and this project must not deploy into them. Render's free tier allows one free PostgreSQL per workspace, so a new workspace is also what makes the free database possible. Workspaces cannot be created through the API or MCP.
-2. **Render authentication.** Both the Render CLI token and the Render MCP session have expired (`your token is expired; run render login`).
+| Resource | Id | Plan | Region | Workspace |
+|---|---|---|---|---|
+| `caveat` web service (Docker) | `srv-dbr15c3m8hqs73c8lo30` | Free | Frankfurt | CAVEAT, isolated and used by nothing else |
+| `caveat-db` PostgreSQL 16 | `dpg-dbr0sj3bc2fs73fe2gjg-a` | Free | Frankfurt | CAVEAT |
 
-When the live URL exists, it goes in the README and in [SUBMISSION.md](SUBMISSION.md).
+The resources were created with the Render CLI rather than the Blueprint, with the same settings as [`render.yaml`](../render.yaml). `render blueprints validate` passes on that file. The database URL was passed from the CLI straight to the service, and `CAVEAT_SECRET` was generated locally with `openssl rand -hex 32`. Neither value was printed or committed. Auto-deploy is off.
+
+### Free-tier limits
+
+- **The database expires on 12 Dec 2026** (created 12 Nov 2026 19:06 UTC), followed by a 14-day grace period. After that it must be recreated. The demo holds only synthetic sessions that expire after 3 hours idle, so nothing of value is lost. Recreating it means: create a free PostgreSQL in the CAVEAT workspace, set the service's `DATABASE_URL` to its internal URL, and redeploy.
+- The web service spins down after about 15 minutes idle. The first request after that takes about 30 s or more.
+- Free instances have 512 MB RAM and a shared CPU. Free databases have 1 GB of storage and no backups.
+- The app allows 300 API requests per minute and 10 new sessions per minute per client address, plus a global session cap.
+
+### Verified on the live service
+
+`scripts/verify-live.mjs` checked 26 behaviours, then 6 more after a restart of the service, and all 32 passed:
+
+- HTTPS, HSTS, CSP, and the HTTP-to-HTTPS redirect;
+- health on PostgreSQL;
+- scenario A: contradiction, "I might be wrong about this.", 409 on booking, correction, then booking;
+- scenario B: stale memory blocked, then reconfirmed;
+- scenario C: forget with 14 of 14 checks, then ask, reload, old backup, delayed job and fresh export;
+- ingestion and retrieval of a new memory;
+- session isolation;
+- restart recovery;
+- the proxy-hop rate limit: forged `X-Forwarded-For` values hit HTTP 429 at request 295, so `CAVEAT_TRUST_PROXY_HOPS=3` is correct.
+
+The Playwright desktop suite passed 11 of 11 against the live URL (`docs/evidence/live-e2e.log`). The service logs hold no secrets, connection strings, cookies or memory content. Evidence is in `docs/evidence/live-*`.
 
 ## What gets deployed
 
@@ -26,26 +51,29 @@ No persistent disk is used. The web service's disk is ephemeral. All state lives
 - `CAVEAT_TRUST_PROXY_HOPS=3` tells the server how many `X-Forwarded-For` entries Render's edge appends. Verify it after the deploy (below).
 - `NODE_ENV=production` is set in the image and turns on `Secure` cookies and HSTS.
 
-## Steps for the owner
+## Redeploying or recreating
 
-1. In the Render dashboard, create a new workspace named **CAVEAT**. Don't use an existing one.
-2. Re-authenticate: run `! render login` in this session, or reconnect the Render MCP with `/mcp`.
-3. Give Render access to `abuzaro21/caveat`. Either make the repository public, or grant the Render GitHub app access to it.
-4. In the CAVEAT workspace, choose **New → Blueprint**, pick the repository, and apply `render.yaml`. Check that both resources show **Free**.
-5. Trigger the first deploy, then run the checks below.
+- **Redeploy** after pushing to `main`: `render deploys create srv-dbr15c3m8hqs73c8lo30`. Auto-deploy is off.
+- **Recreate** from scratch in a new, isolated workspace: apply `render.yaml` as a Blueprint (**New → Blueprint**), and check that both resources show **Free**.
 
 ## Post-deploy verification
 
 ```bash
-BASE=https://<service>.onrender.com
+BASE=https://caveat.onrender.com
 curl -fs $BASE/api/health                      # {"ok":true,"store":"postgres",...}
-curl -sI $BASE/ | grep -iE 'content-security|strict-transport|x-frame'
-E2E_BASE_URL=$BASE npx playwright test --project=desktop   # 8 tests, 9 sessions: under the 10-per-minute limit
+node scripts/verify-live.mjs $BASE --before-restart /tmp/caveat-live.json   # 26 checks
+render restart srv-dbr15c3m8hqs73c8lo30                                      # then wait for health
+node scripts/verify-live.mjs $BASE --after-restart /tmp/caveat-live.json --rate-limit   # 6 checks
 ```
 
-- **Proxy hops.** Send 301 requests with a different fake left-most `X-Forwarded-For` each time. They must still be rate limited as one client (HTTP 429 after 300 per minute). If they are not, the hop count is wrong: correct it before announcing the URL.
-- **Restart persistence.** Start a session and forget the private location. Restart the service from the dashboard. The same cookie must still show the memory as forgotten, and importing the old export must still be refused.
-- **Isolation.** Two browsers get two households, and a forget in one leaves the other untouched. The e2e suite checks this.
+The state file holds a session cookie and an export of synthetic data. Delete it afterwards.
+
+The browser suite runs in two batches, because it opens more than the 10 new sessions per minute that one address may create. Wait about a minute between the two:
+
+```bash
+E2E_BASE_URL=$BASE npx playwright test --project=desktop --grep "A:|B:|C:|C2:|C3:"
+E2E_BASE_URL=$BASE npx playwright test --project=desktop --grep-invert "A:|B:|C:|C2:|C3:"
+```
 
 ## Local and container runs
 
