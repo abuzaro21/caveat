@@ -118,6 +118,9 @@ export function createApp(o: AppOptions) {
     if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, { error: 'method not allowed' });
     let rel: string;
     try { rel = decodeURIComponent(path); } catch { return send(res, 400, { error: 'bad path' }); }
+    // A backslash is a separator on Windows and an ordinary character on Linux. No asset name has one, so refuse it
+    // everywhere, and the same request gets the same answer on every platform.
+    if (rel.includes('\\')) return send(res, 400, { error: 'bad path' });
     let file = resolve(publicDir, '.' + rel);
     // Path-component containment, not a string prefix: "public-backup" is not inside "public".
     const inside = relative(publicDir, file);
