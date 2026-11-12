@@ -69,28 +69,49 @@ test('C: forgetting is verified, survives a reload, and an old backup and a stal
   expect(errors).toEqual([]);
 });
 
-// Codex review 2, finding 1: a short, common-looking memory ("Gym") must not survive in the page after it is forgotten.
-test('C2: a relearned short memory, once forgotten, is gone from the page too, and the page proof checks it', async ({ page }) => {
-  const errors = await open(page);
+// Forget the seeded location with "may relearn", then teach it a new one through the API.
+async function relearn(page: Page, label: string) {
   await guide(page, 'Forget the private location').click();
-  let dialog = page.getByRole('dialog');
+  const dialog = page.getByRole('dialog');
   await dialog.getByRole('radio', { name: /may relearn/ }).click();
   await dialog.getByRole('button', { name: 'Forget it' }).click();
   await expect(dialog).toContainText('Forgotten, and verified');
   await dialog.getByRole('button', { name: 'Close' }).click();
-  const told = await page.request.post('/api/tell', { data: { predicate: 'location.private', value: { label: 'Gym', day: 'fri', from: 15, to: 17 }, excerpt: 'Gym' } });
+  const told = await page.request.post('/api/tell', { data: { predicate: 'location.private', value: { label, day: 'fri', from: 15, to: 17 }, excerpt: label } });
   expect(told.ok()).toBe(true);
-  await page.getByRole('button', { name: 'Where am I on Friday afternoon?' }).click();
-  await expect(page.locator('.msg-caveat').last()).toContainText('Gym');
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Talking to Maya' })).toBeVisible();
+}
+async function forgetAndProve(page: Page) {
   await guide(page, 'Forget the private location').click();
-  dialog = page.getByRole('dialog');
+  const dialog = page.getByRole('dialog');
   await dialog.getByRole('button', { name: 'Forget it' }).click();
   await expect(dialog).toContainText('Forgotten, and verified');
   await dialog.getByRole('button', { name: 'Run the proofs' }).click();
   await expect(dialog.locator('.proof-pass')).toHaveCount(6, { timeout: 20_000 });
   await expect(dialog.locator('.proof-fail')).toHaveCount(0);
   await dialog.getByRole('button', { name: 'Close' }).click();
-  await expect(page.locator('body')).not.toContainText(/\bGym\b/);
+}
+
+// Codex reviews 2 and 3, finding 1: a short memory ("Gym") must not survive in the page, nor in a draft in the composer.
+test('C2: a relearned short memory, once forgotten, is gone from the page and the composer, and the page proof checks it', async ({ page }) => {
+  const errors = await open(page);
+  await relearn(page, 'Gym');
+  await page.getByRole('button', { name: 'Where am I on Friday afternoon?' }).click();
+  await expect(page.locator('.msg-caveat').last()).toContainText('Gym');
+  await tab(page, 'Assistant');
+  await page.locator('#q').fill('I went to Gym');
+  await forgetAndProve(page);
+  await expect(page.locator('#q')).toHaveValue('');
+  await expect(page.locator('body')).not.toContainText(/Gym/);
+  expect(errors).toEqual([]);
+});
+
+// Codex review 3, finding 3: text shared with records that are kept ("home") is not evidence of a leak.
+test('C3: a memory whose text is ordinary vocabulary still proves cleanly after it is forgotten', async ({ page }) => {
+  const errors = await open(page);
+  await relearn(page, 'Home');
+  await forgetAndProve(page);
   expect(errors).toEqual([]);
 });
 

@@ -21,7 +21,7 @@ When the agent recalls something, CAVEAT recomputes a verdict from that evidence
 |---|---|---|
 | **A: Conflicting preference** | In July, Maya said she prefers deliveries to her home in the **morning**. Since late October, the courier's log has recorded three failed morning attempts, and a model guessed "evenings". | Before booking the sofa it says: *"I might be wrong about this. You told me mornings on 14 Jul 2026, but ParcelCo delivery log has 3 newer reports, 28 Oct – 10 Nov 2026, suggesting mornings may no longer be right."* Nothing is booked (the server returns HTTP 409) until Maya answers. Her answer is recorded as an explicit correction and supersedes everything older. The model's guess is shown as weak dissent and never wins. |
 | **B: Stale memory** | Advance the clock by 30 days. Maya's office days were last confirmed 113 days ago, and that topic is re-checked after 90 days. | The laptop-repair task asks *"Is this still right?"* instead of acting. A one-tap reconfirmation makes the memory fresh again. Her home city, confirmed almost two years ago, is still fine: a home city has a 5-year horizon. Freshness depends on the topic. |
-| **C: Privacy revocation** | Maya forgets her private recurring location, a physiotherapy appointment. | The forget deletes the evidence rows and their index entries and usage records. It rewrites booking text and summaries derived from them, purges the cache and leaves a content-free tombstone. A content-free receipt lists 14 verification checks. Then six live proofs run: ask again, cold reload, a fresh export, restore the **signed backup taken before the forget**, release a **delayed job queued before it**, and search the page itself for any trace. Each proof passes. A test also hard-kills the server and byte-scans the SQLite file and WAL for the deleted words. |
+| **C: Privacy revocation** | Maya forgets her private recurring location, a physiotherapy appointment. | The forget deletes the evidence rows and their index entries and usage records. It rewrites booking text and summaries derived from them, purges the cache and leaves a content-free tombstone. A content-free receipt lists 14 verification checks. Then six live proofs run: ask again, cold reload, a fresh export, restore the **signed backup taken before the forget**, release a **delayed job queued before it**, and search the page itself for any trace. Each proof passes. A test also stops and restarts the server, and byte-scans the SQLite file and WAL for the deleted words. |
 
 The **naive baseline** (`/api/naive`) runs the same inputs through "latest text wins" memory. It books evenings on a model's guess. Its "forget" only hides the row, so the search index and export still hold it and an old backup restores it. It is a negative control, shown in the evidence panel.
 
@@ -49,8 +49,8 @@ Requires Node 24.13 or later (native TypeScript, `node:sqlite`).
 npm ci
 npm run build          # UI -> public/
 npm start              # http://localhost:3000, SQLite in data/
-npm test               # 60 tests: policy, scenarios, adversarial, HTTP, restart, review regressions
-npm run test:e2e       # Playwright, desktop + mobile (14 tests)
+npm test               # 62 tests: policy, scenarios, adversarial, HTTP, restart, review regressions
+npm run test:e2e       # Playwright, desktop + mobile (16 tests)
 ```
 
 To run the same suite on PostgreSQL, set `CAVEAT_TEST_DATABASE_URL=postgres://…` before `npm test`. To serve from PostgreSQL, set `DATABASE_URL` (see [docs/DEPLOY.md](docs/DEPLOY.md)).

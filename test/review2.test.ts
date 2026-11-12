@@ -65,3 +65,35 @@ test('R2-3: a hold wholly inside a delivery slot blocks that slot', async () => 
   const b = await c.book(sid, 'sofa-home', 'hold-inside');
   assert.ok(b.booking.start >= hold.to || b.booking.end <= hold.from);
 });
+
+// Codex review 3, finding 2: a legacy booking can quote a memory whose evidence an older engine already deleted.
+test('R3-2: forgetting rewrites a migrated legacy explanation even when no evidence is left to delete', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'caveat-r3-'));
+  const schema = `t_${randomBytes(4).toString('hex')}`;
+  const openDb = async (): Promise<Db> => (PG_URL ? PgDb.open(PG_URL, schema) : new SqliteDb(join(dir, 'legacy.db')));
+  try {
+    let db = await openDb();
+    let c = new Caveat(db, SECRET);
+    const { sid } = await c.createSession();
+    await c.answer(sid, 'location.private', undefined, { label: 'Gym', day: 'fri', from: 15, to: 17 });
+    await c.answer(sid, 'delivery.window', HOME, 'afternoon');
+    await c.book(sid, 'sofa-home', 'legacy-gym');
+    // What the pre-parts engine left behind: no parts column, the evidence gone, the booking text still quoting it.
+    await db.tx(null, async (q) => {
+      await q.run('ALTER TABLE bookings DROP COLUMN parts');
+      await q.run('DELETE FROM memory_index WHERE session = ?', [sid]);
+      await q.run('DELETE FROM uses WHERE session = ?', [sid]);
+      await q.run('DELETE FROM evidence WHERE session = ? AND predicate = ?', [sid, 'location.private']);
+    });
+    const before = await db.tx(null, (q) => q.all<{ reason: string }>('SELECT reason FROM bookings WHERE session = ?', [sid]));
+    assert.match(before[0].reason, /Gym/);
+    await db.close();
+    db = await openDb();
+    c = new Caveat(db, SECRET);
+    const r = await c.forget(sid, 'maya', 'location.private', 'block');
+    assert.equal(r.verified, true, JSON.stringify(r.verification.filter((v) => !v.pass)));
+    const rows = await db.tx(null, (q) => q.all('SELECT reason, window_label, parts FROM bookings WHERE session = ?', [sid]));
+    assert.doesNotMatch(JSON.stringify(rows), /Gym/);
+    await db.close();
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});

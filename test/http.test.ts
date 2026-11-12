@@ -94,3 +94,15 @@ test('rate limiting per client', async () => {
   server.close();
   assert.deepEqual(codes, [200, 200, 200, 200, 200, 429, 429, 429]);
 });
+
+test('X-Forwarded-For is trusted only to the configured hop count: a client cannot spoof its way past the limit', async () => {
+  const c = new Caveat(await makeDb(), SECRET);
+  const { server } = createApp({ caveat: c, rateLimit: 2, trustProxyHops: 1, publicDir: 'test/no-ui' });
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+  const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api/health`;
+  const get = async (xff: string) => (await fetch(url, { headers: { 'x-forwarded-for': xff } })).status;
+  // The proxy appends the real client address last; anything before it was written by the client and is ignored.
+  const codes = [await get('spoof-1, 203.0.113.7'), await get('spoof-2, 203.0.113.7'), await get('spoof-3, 203.0.113.7'), await get('203.0.113.8')];
+  server.close();
+  assert.deepEqual(codes, [200, 200, 429, 200]);
+});

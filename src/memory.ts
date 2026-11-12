@@ -218,7 +218,7 @@ export class Caveat {
       }
       const stored = out.filter((o) => o.status === 'stored');
       if (stored.length) { await this.bump(q, sid, clock); await this.refreshSummaries(q, sid, clock); }
-      await this.audit(q, sid, clock, 'ingest', { channel, stored: stored.map((o) => o.id), duplicates: out.filter((o) => o.status === 'duplicate').length, rejected: out.filter((o) => o.status === 'rejected').map((o) => o.reason) });
+      await this.audit(q, sid, clock, 'ingest', { channel, stored: stored.length, duplicates: out.filter((o) => o.status === 'duplicate').length, rejected: out.filter((o) => o.status === 'rejected').map((o) => o.reason) });
       return out;
     });
   }
@@ -385,10 +385,12 @@ export class Caveat {
   /** Delete evidence and everything derived from it. Returns counts. `markers` are distinctive terms of the deleted content. */
   private async purge(q: Q, sid: string, ids: string[], markers: string[]) {
     const counts = { evidence: 0, index: 0, uses: 0, bookings: 0, summaries: 0 };
-    if (!ids.length) return counts;
+    // No early return when nothing is left to delete: a legacy booking can still quote evidence deleted long ago.
     const inList = ids.map(() => '?').join(',');
-    counts.index = await q.run(`DELETE FROM memory_index WHERE session = ? AND evidence_id IN (${inList})`, [sid, ...ids]);
-    counts.uses = await q.run(`DELETE FROM uses WHERE session = ? AND evidence_id IN (${inList})`, [sid, ...ids]);
+    if (ids.length) {
+      counts.index = await q.run(`DELETE FROM memory_index WHERE session = ? AND evidence_id IN (${inList})`, [sid, ...ids]);
+      counts.uses = await q.run(`DELETE FROM uses WHERE session = ? AND evidence_id IN (${inList})`, [sid, ...ids]);
+    }
     // Bookings that relied on the deleted memory keep their slot (the delivery is an action already taken), but every
     // stored piece of explanation derived from that evidence is replaced, by recorded dependency, not by word matching.
     void markers;
@@ -402,7 +404,7 @@ export class Caveat {
         [JSON.stringify(evs.filter((x) => !ids.includes(x))), next[0].text, composeReason(next), JSON.stringify(next), sid, b.id]);
       counts.bookings++;
     }
-    counts.evidence = await q.run(`DELETE FROM evidence WHERE session = ? AND id IN (${inList})`, [sid, ...ids]);
+    if (ids.length) counts.evidence = await q.run(`DELETE FROM evidence WHERE session = ? AND id IN (${inList})`, [sid, ...ids]);
     return counts;
   }
   /** Post-commit checks against the real tables, the export, the cache and the retrieval path. */

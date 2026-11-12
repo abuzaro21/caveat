@@ -51,7 +51,7 @@ After the commit:
 | Attempt | Stopped by | Test |
 |---|---|---|
 | Ask again | Revocation filter before search; retrieval returns ABSTAIN | `scenarios.test.ts`, e2e C |
-| Restart the server (hard kill) | Tombstones and deletions are committed. The SQLite file and WAL are byte-scanned for "Harbour", "Physio" and "Flores" after restart. | `restart.test.ts` |
+| Restart the server | Tombstones and deletions are committed. The SQLite file and WAL are byte-scanned for "Harbour", "Physio" and "Flores" after restart. | `restart.test.ts` |
 | Restore the signed export taken before the forget | Ingest checks the tombstone: `block` rejects; `before` rejects anything observed at or before the revocation | `restart.test.ts`, e2e C |
 | Re-date the old copy and import it unsigned | An unsigned import can never restore a forgotten topic | `review1.test.ts` R1-6 |
 | Release a delayed job queued before the forget | The job holds ids and revision only, and is fenced by revision | `adversarial.test.ts`, `review1.test.ts` R1-5 |
