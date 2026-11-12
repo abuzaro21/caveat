@@ -1,0 +1,79 @@
+{
+  "file": "film/out/caveat-film.mp4",
+  "ok": true,
+  "checks": {
+    "duration": {
+      "value": 87.5,
+      "ok": true
+    },
+    "resolution": {
+      "value": "1920x1080",
+      "ok": true
+    },
+    "fps": {
+      "value": 30,
+      "ok": true
+    },
+    "frames": {
+      "value": 2625,
+      "ok": true
+    },
+    "codecs": {
+      "value": "h264/yuv420p + aac 48000Hz 2ch + mov_text",
+      "ok": true
+    },
+    "blackFrames": {
+      "value": [],
+      "ok": true
+    },
+    "audioClipping": {
+      "value": {
+        "samplePeakDb": -4.31116,
+        "truePeakDbtp": -4.3
+      },
+      "ok": true
+    },
+    "loudness": {
+      "value": -17.2,
+      "ok": true
+    },
+    "captions": {
+      "value": {
+        "cues": 29,
+        "lastEnd": 83.35,
+        "inSilence": []
+      },
+      "ok": true
+    },
+    "captionsBurnedIn": {
+      "value": {
+        "sampledCues": 8,
+        "pctPixelsChangedInCaptionArea": [
+          3.07,
+          3.37,
+          8.5,
+          9.7,
+          9.97,
+          6.34,
+          7.11,
+          0.98
+        ]
+      },
+      "ok": true
+    },
+    "endingLogoVisible": {
+      "value": {
+        "meanAbsDiffVsLogoMaster": 0.12
+      },
+      "ok": true
+    },
+    "endingStable": {
+      "value": {
+        "meanAbsDiffLast2s": 0,
+        "lastFrameLuma": 18.4
+      },
+      "ok": true
+    }
+  },
+  "note": "Automated checks only; no human listening or viewing review is claimed."
+}

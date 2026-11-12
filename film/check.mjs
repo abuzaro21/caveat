@@ -34,10 +34,11 @@ const srt = readFileSync(F('./caveat-film.srt'), 'utf8').trim().split(/\r?\n\r?\
 const capOk = srt.every((c, i) => c.to > c.from && c.to <= duration + 0.01 && (i === 0 || c.from >= srt[i - 1].to - 0.001));
 const capInSilence = srt.filter((c) => silences.some(([s, e]) => c.from > s + 0.3 && c.to < e - 0.3)).map((c) => c.text);
 
-// burned-in captions: at the middle of each sampled cue, the bottom band differs from the same frame before burning
-const band = (file, at) => Buffer.from(run('ffmpeg', ['-v', 'error', '-ss', String(at), '-i', file, '-frames:v', '1', '-vf', 'crop=1920:200:0:860,scale=192:20,format=gray', '-f', 'rawvideo', '-']), 'latin1');
+// burned-in captions: at the middle of each sampled cue, compare the caption area (centre-bottom, full resolution) with the
+// same frame before burning, and report the percentage of pixels that changed sharply (glyphs and their box)
+const band = (file, at) => Buffer.from(run('ffmpeg', ['-v', 'error', '-ss', String(at), '-i', file, '-frames:v', '1', '-vf', 'crop=1000:150:460:910,format=gray', '-f', 'rawvideo', '-']), 'latin1');
 const sample = srt.filter((_, i) => i % 4 === 0);
-const burnDiffs = sample.map((c) => { const m = (c.from + c.to) / 2, x = band(MP4, m), y = band(UNBURNED, m); return +(x.reduce((s, b, i) => s + Math.abs(b - y[i]), 0) / x.length).toFixed(2); });
+const burnDiffs = sample.map((c) => { const m = (c.from + c.to) / 2, x = band(MP4, m), y = band(UNBURNED, m); return +((100 * x.filter((b, i) => Math.abs(b - y[i]) > 40).length) / x.length).toFixed(2); });
 
 // ending: the last frame matches the logo master, and the last 2 s are stable
 const frame = (t, out) => run('ffmpeg', ['-v', 'error', '-y', '-ss', String(t), '-i', MP4, '-frames:v', '1', out]);
@@ -64,7 +65,7 @@ const checks = {
   audioClipping: { value: { samplePeakDb: peak, truePeakDbtp: truePeak }, ok: peak < -0.5 && truePeak <= -1.0 },
   loudness: { value: lufs, ok: lufs >= -18 && lufs <= -14 },
   captions: { value: { cues: srt.length, lastEnd: srt.at(-1).to, inSilence: capInSilence }, ok: capOk && capInSilence.length === 0 },
-  captionsBurnedIn: { value: { sampledCues: sample.length, meanAbsDiffBottomBand: burnDiffs }, ok: burnDiffs.every((d) => d > 4) },
+  captionsBurnedIn: { value: { sampledCues: sample.length, pctPixelsChangedInCaptionArea: burnDiffs }, ok: burnDiffs.every((d) => d > 0.5) },
   endingLogoVisible: { value: { meanAbsDiffVsLogoMaster: +diff(ref, sB).toFixed(2) }, ok: diff(ref, sB) < 3 },
   endingStable: { value: { meanAbsDiffLast2s: +diff(sA, sB).toFixed(2), lastFrameLuma: +lum(sB).toFixed(1) }, ok: diff(sA, sB) < 2 && lum(sB) > 8 },
 };

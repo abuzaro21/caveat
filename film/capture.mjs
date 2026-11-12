@@ -82,7 +82,9 @@ try {
     await glide(dialog.locator('.proofs li').last());
   });
   await scene('naive', async (t) => {
+    // Forgetting clears the evidence panel, so plan the sofa again to bring a decision back into view.
     await t(0.2); await press(dialog.getByRole('button', { name: 'Close' }));
+    await press(guide('Book the sofa'));
     await press(page.getByRole('button', { name: 'Show what a naive memory does' }));
     await page.locator('.naive-body').waitFor();
     await glide(page.locator('.naive-body'));

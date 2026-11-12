@@ -1,0 +1,122 @@
+1
+00:00:00,300 --> 00:00:02,191
+Your assistant remembers you.
+
+2
+00:00:02,241 --> 00:00:04,600
+Does it know when it might be wrong?
+
+3
+00:00:05,350 --> 00:00:06,310
+This is CAVEAT.
+
+4
+00:00:06,360 --> 00:00:12,507
+Every memory carries its source, the strength of its
+evidence, its freshness, and its scope.
+
+5
+00:00:12,557 --> 00:00:14,325
+The household is fictional.
+
+6
+00:00:15,075 --> 00:00:18,385
+In July, Maya said she wants morning deliveries.
+
+7
+00:00:18,435 --> 00:00:22,375
+Since then, the courier has logged
+three failed mornings.
+
+8
+00:00:22,425 --> 00:00:28,675
+So before booking the sofa, CAVEAT says it might be
+wrong, and the server refuses to book.
+
+9
+00:00:29,425 --> 00:00:30,930
+She chooses afternoons.
+
+10
+00:00:30,980 --> 00:00:34,851
+That becomes her correction, and
+the booking goes through.
+
+11
+00:00:34,901 --> 00:00:37,825
+A model's guess is shown, but it never wins.
+
+12
+00:00:38,575 --> 00:00:45,541
+A month later, her office days are a hundred and
+thirteen days old, past their ninety-day horizon.
+
+13
+00:00:45,591 --> 00:00:46,758
+So it asks first.
+
+14
+00:00:46,808 --> 00:00:49,550
+One tap, and the memory is fresh again.
+
+15
+00:00:50,300 --> 00:00:52,922
+Now Maya forgets a private appointment.
+
+16
+00:00:52,972 --> 00:00:58,471
+The evidence, its index entries, and the
+booking text that quoted it are deleted.
+
+17
+00:00:58,521 --> 00:01:00,800
+The receipt lists fourteen checks.
+
+18
+00:01:01,550 --> 00:01:02,874
+Then it proves it.
+
+19
+00:01:02,924 --> 00:01:03,638
+Ask again.
+
+20
+00:01:03,688 --> 00:01:04,172
+Reload.
+
+21
+00:01:04,222 --> 00:01:04,707
+Export.
+
+22
+00:01:04,757 --> 00:01:06,463
+Restore the old backup.
+
+23
+00:01:06,513 --> 00:01:08,143
+Release a delayed job.
+
+24
+00:01:08,193 --> 00:01:09,899
+Search the page itself.
+
+25
+00:01:09,949 --> 00:01:11,350
+Nothing comes back.
+
+26
+00:01:12,100 --> 00:01:18,775
+A naive memory, given the same inputs, books on a
+guess, and its forget only hides the row.
+
+27
+00:01:19,525 --> 00:01:20,052
+CAVEAT.
+
+28
+00:01:20,102 --> 00:01:21,866
+Remember with reasons.
+
+29
+00:01:21,916 --> 00:01:23,350
+Forget with proof.
