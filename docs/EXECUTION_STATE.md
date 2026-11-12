@@ -6,9 +6,9 @@ Last updated: 12 Nov 2026. This file records what is done, what is verified, and
 
 | Item | Evidence |
 |---|---|
-| Memory engine, policy, forgetting, retention, worker, import/export | `src/`; 63 unit and integration tests |
-| Tests on SQLite and on PostgreSQL 16 | 63/63 on each (`docs/evidence/`) |
-| Browser tests, desktop and mobile | 20/20 Playwright (`docs/evidence/`) |
+| Memory engine, policy, forgetting, retention, worker, import/export | `src/`; 64 unit and integration tests |
+| Tests on SQLite and on PostgreSQL 16 | 64/64 on each (`docs/evidence/`) |
+| Browser tests, desktop and mobile | 22/22 Playwright (`docs/evidence/`) |
 | UI: assistant, evidence panel, memory inspector, forget dialog, guided demo, naive control | `ui/src/` |
 | Independent architectures (Claude A, Codex B) | `docs/reviews/claude-architecture-A.md`, `codex-architecture-B.md`, [ARCHITECTURE-DECISIONS.md](ARCHITECTURE-DECISIONS.md) |
 | Codex adversarial reviews 1–4, all findings fixed with regression tests | `docs/reviews/` |

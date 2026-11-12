@@ -121,3 +121,39 @@ test('R4-2: old ingest audit entries are rewritten to counts on open, so no id o
     await db.close();
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+
+// Found while capturing the film (no review raised it): task.booked audit entries listed the evidence ids a booking
+// relied on, so after a booking, a forgotten record's id survived in the audit log while the receipt still verified.
+test('R5-1: after a booking, forgetting leaves no deleted evidence id anywhere, and old booking audit entries are migrated', async () => {
+  const { c, sid } = await makeCaveat();
+  const doomed = (await c.state(sid)).memories.find((m) => m.predicate === 'location.private')!.decision.considered.map((x) => x.id);
+  assert.ok(doomed.length > 0);
+  await c.answer(sid, 'delivery.window', { place: 'home' }, 'afternoon');
+  await c.book(sid, 'sofa-home', 'r5-booking');
+  const r = await c.forget(sid, 'maya', 'location.private', 'block');
+  assert.equal(r.verified, true, JSON.stringify((r as any).verification.filter((v: any) => !v.pass)));
+  const dump = JSON.stringify(await c.state(sid));
+  for (const id of doomed) assert.ok(!dump.includes(id), `state still holds ${id}`);
+
+  const dir = mkdtempSync(join(tmpdir(), 'caveat-r5-'));
+  const schema = `t_${randomBytes(4).toString('hex')}`;
+  const openDb = async (): Promise<Db> => (PG_URL ? PgDb.open(PG_URL, schema) : new SqliteDb(join(dir, 'booked.db')));
+  let db: Db | null = null;
+  try {
+    db = await openDb();
+    const c2 = new Caveat(db, SECRET);
+    const s2 = (await c2.createSession()).sid;
+    await c2.answer(s2, 'delivery.window', { place: 'home' }, 'afternoon');
+    await c2.book(s2, 'sofa-home', 'r5-booking-old');
+    await db.tx(null, (q) => q.run("UPDATE audit SET detail = ? WHERE session = ? AND op = 'task.booked'", [JSON.stringify({ task: 'sofa-home', booking: 'bk_old', relied_on: ['ev_old_a', 'ev_old_b'] }), s2]));
+    await db.close(); db = null;
+    db = await openDb();
+    const rows = await db.tx(null, (q) => q.all<{ detail: string }>("SELECT detail FROM audit WHERE session = ? AND op = 'task.booked'", [s2]));
+    assert.ok(rows.length > 0);
+    assert.doesNotMatch(JSON.stringify(rows), /ev_old_/);
+    assert.ok(rows.every((x) => JSON.parse(x.detail).relied_on === 2));
+  } finally {
+    await db?.close().catch(() => {});
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

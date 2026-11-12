@@ -118,6 +118,19 @@ for (const label of ['Home', 'Talking', 'Proof']) {
   });
 }
 
+// Found while capturing the film: once a booking had been made, its audit entry kept the forgotten record's id.
+test('C4: after a booking and a stale-memory check, forgetting still passes all six proofs', async ({ page }) => {
+  const errors = await open(page);
+  await guide(page, 'Book the sofa').click();
+  await page.locator('.ask-card').first().getByRole('button', { name: 'Afternoons' }).click();
+  await expect(page.locator('.booking').first()).toBeVisible();
+  await guide(page, 'Jump 30 days ahead').click();
+  await guide(page, 'Send the repair to the office').click();
+  await page.locator('.ask-card').first().getByRole('button', { name: /Yes, still/ }).click();
+  await forgetAndProve(page);
+  expect(errors).toEqual([]);
+});
+
 test('sessions are isolated: forgetting in one visitor session leaves another untouched', async ({ browser }) => {
   const a = await browser.newContext(), b = await browser.newContext();
   const pa = await a.newPage(), pb = await b.newPage();

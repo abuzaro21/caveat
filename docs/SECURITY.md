@@ -38,6 +38,7 @@ CAVEAT is a public demo with no accounts and no real personal data. The threat m
 | 2 | Same | 7 closed, 2 partial; 3 new findings: page-held copies, legacy schema, holds inside a slot | All fixed. [Response](reviews/codex-review-2-response.md) |
 | 3 | Same | Hold fix closed; 3 findings: search terms and composer draft kept in the tab, legacy text with no surviving evidence, false failures on ordinary vocabulary | All fixed. [Response](reviews/codex-review-3-response.md) |
 | 4 | Same | No HIGH. Review-3 items 1 and 2 closed, item 3 partial. 2 MEDIUM findings: false page-proof failures on the interface's own wording, and evidence ids left in old ingest audit entries | All fixed. [Response](reviews/codex-review-4-response.md) |
+| — | Found by Claude while capturing the film | Booking audit entries kept the evidence ids a booking relied on, so a forgotten record's id outlived it | Fixed, with a migration, an id scan in the receipt, test R5-1 and e2e C4. [Response](reviews/codex-review-4-response.md) |
 
 ## Known limits
 

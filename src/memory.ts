@@ -329,7 +329,7 @@ export class Caveat {
         [sid, id, task, idem, p.slot.start, p.slot.end, p.place, parts[0].text, JSON.stringify(p.evidenceIds), composeReason(parts), JSON.stringify(parts), clock]);
       for (const ev of p.evidenceIds) await q.run('INSERT INTO uses (session, evidence_id, task, at, outcome) VALUES (?, ?, ?, ?, ?)', [sid, ev, task, clock, 'USE']);
       await this.bump(q, sid, clock);
-      await this.audit(q, sid, clock, 'task.booked', { task, booking: id, relied_on: p.evidenceIds });
+      await this.audit(q, sid, clock, 'task.booked', { task, booking: id, relied_on: p.evidenceIds.length });
       const row = (await q.all<Row>('SELECT * FROM bookings WHERE session = ? AND id = ?', [sid, id]))[0];
       return { booking: this.bookingView(row), duplicate: false, plan: p };
     });
@@ -421,12 +421,13 @@ export class Caveat {
         add('Distinctive terms left in the search index', '0', (await q.all<{ n: number }>(`SELECT count(*) AS n FROM memory_index WHERE session = ? AND term IN (${ph})`, [sid, ...markers]))[0].n);
         const texts = [
           ...(await q.all<Row>('SELECT text AS t FROM summaries WHERE session = ?', [sid])).map((r) => ['summaries', r.t]),
-          ...(await q.all<Row>('SELECT reason AS t FROM bookings WHERE session = ?', [sid])).map((r) => ['bookings', r.t]),
+          ...(await q.all<Row>('SELECT reason, evidence_ids FROM bookings WHERE session = ?', [sid])).map((r) => ['bookings', `${r.reason} ${r.evidence_ids}`]),
           ...(await q.all<Row>('SELECT detail AS t FROM audit WHERE session = ?', [sid])).map((r) => ['audit', r.t]),
           ...(await q.all<Row>('SELECT body AS t FROM receipts WHERE session = ?', [sid])).map((r) => ['receipts', r.t]),
         ];
+        // Content is its distinctive terms; the deleted records' ids count too, because an id must not outlive its evidence.
         for (const table of ['summaries', 'bookings', 'audit', 'receipts'])
-          add(`Deleted content in ${table}`, '0', texts.filter(([tb, t]) => tb === table && markers.some((m) => terms(String(t)).includes(m))).length);
+          add(`Deleted content in ${table}`, '0', texts.filter(([tb, t]) => tb === table && (markers.some((m) => terms(String(t)).includes(m)) || doomedIds.some((id) => String(t).includes(id)))).length);
       } else add('Distinctive-term scan', 'skipped', 'skipped');
       add('Tombstone holds no content', 'true', String(Object.keys((await q.all<Row>('SELECT * FROM tombstones WHERE session = ? AND predicate = ?', [sid, predicate]))[0] ?? {}).every((k) => ['session', 'subject', 'predicate', 'mode', 'revoked_at', 'revision'].includes(k))));
     });

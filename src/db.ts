@@ -57,12 +57,16 @@ export const legacyParts = (windowLabel: string, reason: string) =>
 type LegacyRow = { session: string; id: string; window_label: string; reason: string };
 const BACKFILL_SELECT = "SELECT session, id, window_label, reason FROM bookings WHERE parts = ''";
 const BACKFILL_UPDATE = 'UPDATE bookings SET parts = ? WHERE session = ? AND id = ?';
-// Migration: ingest audit entries once listed stored evidence ids. Audit entries carry counts only, so an id must not
-// outlive the evidence it named. Rewrites any old-format entry to a count.
+// Migration: ingest entries once listed stored evidence ids, and task.booked entries the ids a booking relied on.
+// Audit entries carry counts only, so an id must not outlive the evidence it named. Rewrites old-format entries to counts.
 type AuditRow = { session: string; seq: number; detail: string };
-const AUDIT_SELECT = `SELECT session, seq, detail FROM audit WHERE op = 'ingest' AND detail LIKE '%"stored":[%'`;
+const AUDIT_SELECT = `SELECT session, seq, detail FROM audit WHERE (op = 'ingest' AND detail LIKE '%"stored":[%') OR (op = 'task.booked' AND detail LIKE '%"relied_on":[%')`;
 const AUDIT_UPDATE = 'UPDATE audit SET detail = ? WHERE session = ? AND seq = ?';
-const auditCount = (detail: string) => { const d = JSON.parse(detail); if (Array.isArray(d.stored)) d.stored = d.stored.length; return JSON.stringify(d); };
+const auditCount = (detail: string) => {
+  const d = JSON.parse(detail);
+  for (const k of ['stored', 'relied_on']) if (Array.isArray(d[k])) d[k] = d[k].length;
+  return JSON.stringify(d);
+};
 
 /** Every table that can hold session data, for verification scans. */
 export const TABLES = ['evidence', 'memory_index', 'summaries', 'uses', 'bookings', 'tombstones', 'receipts', 'audit'] as const;
