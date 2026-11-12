@@ -9,7 +9,7 @@ import { isPredicate, PREDICATES, type Scope } from './model.ts';
 import { isTask } from './tasks.ts';
 import { naiveDemo } from './naive.ts';
 
-export type AppOptions = { caveat: Caveat; publicDir?: string; trustProxyHops?: number; maxSessions?: number; idleMs?: number; rateLimit?: number; secureCookie?: boolean };
+export type AppOptions = { caveat: Caveat; publicDir?: string; trustProxyHops?: number; maxSessions?: number; idleMs?: number; rateLimit?: number; sessionsPerMinute?: number; secureCookie?: boolean };
 
 const MIME: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.woff2': 'font/woff2', '.ico': 'image/x-icon', '.json': 'application/json', '.webmanifest': 'application/manifest+json' };
 const SECURITY = {
@@ -25,6 +25,7 @@ export function createApp(o: AppOptions) {
   const maxSessions = o.maxSessions ?? 1500;
   const idleMs = o.idleMs ?? 3 * 3600_000;
   const limit = o.rateLimit ?? 300; // requests per minute per client
+  const hsts: Record<string, string> = o.secureCookie ? { 'strict-transport-security': 'max-age=31536000' } : {}; // HTTPS deployments only
   const buckets = new Map<string, { n: number; reset: number; created: number }>();
   let lastSweep = 0;
 
@@ -38,7 +39,7 @@ export function createApp(o: AppOptions) {
   };
   const send = (res: ServerResponse, status: number, body: unknown, headers: Record<string, string> = {}) => {
     const data = JSON.stringify(body);
-    res.writeHead(status, { ...SECURITY, 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', ...headers });
+    res.writeHead(status, { ...SECURITY, ...hsts, 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', ...headers });
     res.end(data);
   };
   const readBody = (req: IncomingMessage): Promise<any> => new Promise((ok, fail) => {
@@ -70,7 +71,7 @@ export function createApp(o: AppOptions) {
       const old = await c.resolve(token(req));
       if (path === '/api/session' && old) return send(res, 200, await c.state(old));
       if (old) await c.dropSession(old);
-      if (++b.created > 10) return send(res, 429, { error: 'too many new sessions from this address' });
+      if (++b.created > (o.sessionsPerMinute ?? 10)) return send(res, 429, { error: 'too many new sessions from this address' });
       if ((await c.sessionCount()) >= maxSessions) { await c.expireSessions(idleMs / 6); if ((await c.sessionCount()) >= maxSessions) return send(res, 503, { error: 'the demo is at capacity; try again shortly' }); }
       const s = await c.createSession();
       return send(res, 200, await c.state(s.sid), { 'set-cookie': cookie(s.token) });
@@ -125,7 +126,7 @@ export function createApp(o: AppOptions) {
     try {
       const data = await readFile(file);
       const immutable = file.includes(`${normalize('/assets/')}`);
-      res.writeHead(200, { ...SECURITY, 'content-type': MIME[extname(file)] ?? 'application/octet-stream', 'cache-control': immutable ? 'public, max-age=31536000, immutable' : 'no-cache' });
+      res.writeHead(200, { ...SECURITY, ...hsts, 'content-type': MIME[extname(file)] ?? 'application/octet-stream', 'cache-control': immutable ? 'public, max-age=31536000, immutable' : 'no-cache' });
       res.end(req.method === 'HEAD' ? undefined : data);
     } catch { send(res, 404, { error: 'UI not built: run npm run build' }); }
   }

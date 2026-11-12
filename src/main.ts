@@ -15,6 +15,7 @@ const caveat = new Caveat(db, secret);
 const { server } = createApp({
   caveat,
   trustProxyHops: Number(process.env.CAVEAT_TRUST_PROXY_HOPS ?? 0),
+  sessionsPerMinute: Number(process.env.CAVEAT_SESSIONS_PER_MINUTE ?? 10), // per client address; raised only for local browser tests
   secureCookie: process.env.NODE_ENV === 'production',
 });
 const port = Number(process.env.PORT ?? 3000);
