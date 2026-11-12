@@ -18,7 +18,7 @@ export type Plan = {
   canBook: boolean;
   blockedBy: Decision | null;     // the first memory that is not safe to act on
   slot: { start: number; end: number; label: string } | null;
-  skipped: { label: string; reason: string }[];
+  skipped: { label: string; reason: string; deps: string[] }[]; // deps: the evidence that caused the skip
   evidenceIds: string[];          // what a booking would rely on (recorded as "where used")
 };
 
@@ -56,7 +56,13 @@ export function plan(all: Evidence[], tombs: Tombstone[], task: TaskId, now: num
     if (!k || !days.includes(k)) continue;
     const start = d + h0 * 3600_000, end = d + h1 * 3600_000;
     if (pv && pv.day === k && pv.from < h1 && pv.to > h0) {
-      skipped.push({ label: slotLabel(start, end), reason: `you are usually at ${pv.label} on ${DAY_NAMES[k]}s ${pv.from}:00–${pv.to}:00` });
+      skipped.push({ label: slotLabel(start, end), reason: `you are usually at ${pv.label} on ${DAY_NAMES[k]}s ${pv.from}:00–${pv.to}:00`, deps: privacy.evidenceIds });
+      continue;
+    }
+    // A hold is checked against the delivery slot itself, not only against today: a future hold blocks future slots.
+    const held = [start, end - 1].map((at) => evaluate(all, tombs, { actor: 'maya', subject: 'maya', predicate: 'delivery.hold', purpose: 'action', now: at })).find((h) => h.value === true);
+    if (held) {
+      skipped.push({ label: slotLabel(start, end), reason: 'your deliveries are on hold then', deps: held.considered.filter((c) => c.role === 'leader' || c.role === 'supports').map((c) => c.id) });
       continue;
     }
     return { ...base, skipped, canBook: true, blockedBy: null, slot: { start, end, label: slotLabel(start, end) }, evidenceIds };

@@ -46,8 +46,16 @@ export function terms(text: string): string[] {
 const indexTerms = (e: Pick<Evidence, 'predicate' | 'value' | 'excerpt' | 'scopeKey'>) =>
   terms(`${PREDICATES[e.predicate].label} ${e.predicate.replace('.', ' ')} ${valueLabel(e.predicate, e.value)} ${e.excerpt} ${e.scopeKey.replace('place=', '')}`);
 
-/** Simulates a worker in another process: whatever it captured before a revocation is outside the coordinator's reach. */
-type WorkerJob = { id: string; baseRevision: number; captured: { subject: SubjectId; text: string; deps: string[] }[]; queuedAt: number };
+/** A delayed job, as another process would hold it: identifiers and the revision it was planned against, never content. */
+type WorkerJob = { id: string; baseRevision: number; evidenceIds: string[]; queuedAt: number };
+/** One piece of a booking's stored explanation, with the evidence it was derived from. */
+type BookingPart = { key: string; text: string; deps: string[] };
+const REMOVED = '[removed: it relied on a memory you asked me to forget]';
+function composeReason(parts: BookingPart[]) {
+  const out: string[] = [];
+  for (const x of parts) if (x.key !== 'window' && !(x.text === REMOVED && out[out.length - 1] === REMOVED)) out.push(x.text);
+  return out.join(' ');
+}
 
 export type Trace = { step: string; detail: string; ms: number }[];
 
@@ -183,8 +191,16 @@ export class Caveat {
         if ((validFrom !== null && !Number.isFinite(validFrom)) || (validUntil !== null && !Number.isFinite(validUntil)) || (validFrom !== null && validUntil !== null && validFrom > validUntil)) { reject('bad validity interval'); continue; }
         // Revocation is checked before anything is stored: a blocked topic is never relearned, and nothing observed
         // before a revocation can come back (old exports, replays, delayed workers).
+        // 'before' mode: only something the person says after the forget may be learned again. A chat statement or
+        // correction is stamped by the server and serialized after the tombstone, so it is new by construction. An
+        // unsigned import carries a caller-chosen date and could be an old copy re-dated, so it never repopulates a
+        // forgotten topic; a signed one keeps its server-assigned date and must postdate the forget.
         const t = tombs.find((x) => x.subject === it.subject && x.predicate === it.predicate);
-        if (t && (t.mode === 'block' || observedAt <= t.revokedAt)) { reject(t.mode === 'block' ? 'topic revoked: not relearned' : 'revoked: observed before the forget request'); continue; }
+        if (t) {
+          if (t.mode === 'block') { reject('topic revoked: not relearned'); continue; }
+          if (channel === 'import:unsigned') { reject('revoked: an import cannot restore a forgotten topic; tell me directly instead'); continue; }
+          if (channel === 'import:signed' && observedAt <= t.revokedAt) { reject('revoked: observed before the forget request'); continue; }
+        }
         const ret = PREDICATES[it.predicate].retention;
         if (ret && ret.kinds.includes(kind) && observedAt < clock - ret.days * DAY) { reject('past its retention period'); continue; }
         const originId = channel === 'chat' || channel === 'correction' ? rid('chat') : clean(it.originId, 80) || `import-${createHash('sha256').update(JSON.stringify([it.subject, it.predicate, sk, it.value, stance, observedAt])).digest('hex').slice(0, 24)}`;
@@ -193,7 +209,7 @@ export class Caveat {
         const e: Omit<Evidence, 'seq'> = {
           id: rid('ev'), subject: it.subject, predicate: it.predicate, scopeKey: sk, value: it.value, stance, sourceKind: kind, channel,
           sourceLabel: channel === 'chat' ? `${SUBJECTS[actor].name}, in chat` : channel === 'correction' ? `${SUBJECTS[actor].name}, correction` : signed ? (clean(it.sourceLabel, LIMITS.label) || 'Restored export') : `Unsigned import${clean(it.sourceLabel, LIMITS.label) ? ` · ${clean(it.sourceLabel, LIMITS.label)}` : ''}`,
-          lineage: channel === 'chat' || channel === 'correction' ? `subject:${actor}` : `${signed ? '' : 'unsigned:'}${clean(it.lineage, 60) || 'unknown'}`,
+          lineage: channel === 'chat' || channel === 'correction' ? `subject:${actor}` : signed ? (clean(it.lineage, 60) || 'restored') : 'unsigned-import', // a caller cannot declare independence
           originId, excerpt: clean(it.excerpt, LIMITS.excerpt) || `${PREDICATES[it.predicate].label}: ${valueLabel(it.predicate, it.value)}`,
           observedAt, ingestedAt: clock, validFrom, validUntil, corrects: kind === 'user_correction',
         };
@@ -301,9 +317,16 @@ export class Caveat {
       const p = plan(await this.evidence(q, sid), await this.tombstones(q, sid), task, clock);
       if (!p.canBook || !p.slot) throw new Blocked(p);
       const id = rid('bk');
-      const reason = [`${TASKS[task].label}: ${p.decisions.map((d) => `${d.label.toLowerCase()} = ${d.valueLabel}`).join(', ')}.`, ...p.skipped.map((s) => `Skipped ${s.label}: ${s.reason}.`)].join(' ');
-      await q.run('INSERT INTO bookings (session, id, task, idem, slot_start, slot_end, place, window_label, evidence_ids, reason, booked_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [sid, id, task, idem, p.slot.start, p.slot.end, p.place, String(p.decisions[0].valueLabel), JSON.stringify(p.evidenceIds), reason, clock]);
+      // Every piece of the stored explanation records the evidence it came from, so forgetting removes it by dependency.
+      const used = (d: Plan['decisions'][number]) => d.considered.filter((c) => c.role === 'leader' || c.role === 'supports').map((c) => c.id);
+      const parts: BookingPart[] = [
+        { key: 'window', text: String(p.decisions[0].valueLabel), deps: used(p.decisions[0]) },
+        { key: 'head', text: `${TASKS[task].label}:`, deps: [] },
+        ...p.decisions.map((d, i) => ({ key: `decision.${i}`, text: `${d.label.toLowerCase()} = ${d.valueLabel}${i === p.decisions.length - 1 ? '.' : ','}`, deps: used(d) })),
+        ...p.skipped.map((sk, i) => ({ key: `skipped.${i}`, text: `Skipped ${sk.label}: ${sk.reason}.`, deps: sk.deps })),
+      ];
+      await q.run('INSERT INTO bookings (session, id, task, idem, slot_start, slot_end, place, window_label, evidence_ids, reason, parts, booked_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [sid, id, task, idem, p.slot.start, p.slot.end, p.place, parts[0].text, JSON.stringify(p.evidenceIds), composeReason(parts), JSON.stringify(parts), clock]);
       for (const ev of p.evidenceIds) await q.run('INSERT INTO uses (session, evidence_id, task, at, outcome) VALUES (?, ?, ?, ?, ?)', [sid, ev, task, clock, 'USE']);
       await this.bump(q, sid, clock);
       await this.audit(q, sid, clock, 'task.booked', { task, booking: id, relied_on: p.evidenceIds });
@@ -338,11 +361,12 @@ export class Caveat {
       counts.summaries = await this.refreshSummaries(q, sid, clock);
       const id = rid('rc');
       await this.audit(q, sid, clock, 'forget', { subject, predicate, mode: finalMode, receipt: id, deleted: counts.evidence });
-      return { id, clock, revision: revision + 1, counts, finalMode, reason };
+      return { id, clock, revision: revision + 1, counts, finalMode, reason, doomedIds: doomed.map((e) => e.id) };
     });
     const cacheEntries = this.purgeCache(sid, res.revision);
+    const queued = this.worker.get(sid); if (queued) queued.evidenceIds = queued.evidenceIds.filter((x) => !res.doomedIds.includes(x));
     const storage = await this.db.compact();
-    const verification = await this.verify(sid, subject, predicate, res.revision, markers);
+    const verification = await this.verify(sid, subject, predicate, res.revision, markers, res.doomedIds);
     markers = []; // the distinctive terms existed only in memory, only for the verification scan
     return this.writeReceipt(sid, res.id, 'forget', res.clock, {
       request: { subject: SUBJECTS[subject].name, topic: PREDICATES[predicate].label, mode: res.finalMode === 'block' ? 'Forget and never relearn' : 'Forget what you know; may learn it again if I tell you' },
@@ -365,27 +389,30 @@ export class Caveat {
     const inList = ids.map(() => '?').join(',');
     counts.index = await q.run(`DELETE FROM memory_index WHERE session = ? AND evidence_id IN (${inList})`, [sid, ...ids]);
     counts.uses = await q.run(`DELETE FROM uses WHERE session = ? AND evidence_id IN (${inList})`, [sid, ...ids]);
-    // Bookings that relied on or quoted the deleted memory keep their slot (it happened) but lose the reference and the text.
-    for (const b of await q.all<Row>('SELECT id, evidence_ids, reason FROM bookings WHERE session = ?', [sid])) {
-      const evs = (JSON.parse(b.evidence_ids) as string[]);
-      const keep = evs.filter((x) => !ids.includes(x));
-      const quoted = markers.some((m) => terms(b.reason).includes(m));
-      if (keep.length !== evs.length || quoted) {
-        const reason = quoted ? b.reason.split(/(?<=\.)\s+/).map((s: string) => (markers.some((m) => terms(s).includes(m)) ? '[part of this reason was removed when you asked me to forget a memory]' : s)).join(' ') : b.reason;
-        await q.run('UPDATE bookings SET evidence_ids = ?, reason = ? WHERE session = ? AND id = ?', [JSON.stringify(keep), reason, sid, b.id]);
-        counts.bookings++;
-      }
+    // Bookings that relied on the deleted memory keep their slot (the delivery is an action already taken), but every
+    // stored piece of explanation derived from that evidence is replaced, by recorded dependency, not by word matching.
+    void markers;
+    for (const b of await q.all<Row>('SELECT id, evidence_ids, parts, slot_start, slot_end FROM bookings WHERE session = ?', [sid])) {
+      const evs = JSON.parse(b.evidence_ids) as string[];
+      const parts = JSON.parse(b.parts) as BookingPart[];
+      const hit = (x: BookingPart) => x.deps.some((d) => ids.includes(d));
+      if (!evs.some((x) => ids.includes(x)) && !parts.some(hit)) continue;
+      const next = parts.map((x) => (!hit(x) ? x : { key: x.key, deps: [], text: x.key === 'window' ? `${new Date(b.slot_start).getUTCHours()}:00–${new Date(b.slot_end).getUTCHours()}:00` : REMOVED }));
+      await q.run('UPDATE bookings SET evidence_ids = ?, window_label = ?, reason = ?, parts = ? WHERE session = ? AND id = ?',
+        [JSON.stringify(evs.filter((x) => !ids.includes(x))), next[0].text, composeReason(next), JSON.stringify(next), sid, b.id]);
+      counts.bookings++;
     }
     counts.evidence = await q.run(`DELETE FROM evidence WHERE session = ? AND id IN (${inList})`, [sid, ...ids]);
     return counts;
   }
   /** Post-commit checks against the real tables, the export, the cache and the retrieval path. */
-  private async verify(sid: string, subject: SubjectId, predicate: PredicateId, revision: number, markers: string[]) {
+  private async verify(sid: string, subject: SubjectId, predicate: PredicateId, revision: number, markers: string[], doomedIds: string[]) {
     const checks: { check: string; expected: string; actual: string; pass: boolean }[] = [];
     const add = (check: string, expected: string, actual: string | number) => checks.push({ check, expected, actual: String(actual), pass: String(actual) === expected });
     await this.db.tx(null, async (q) => {
       add('Evidence rows for this topic', '0', (await q.all<{ n: number }>('SELECT count(*) AS n FROM evidence WHERE session = ? AND subject = ? AND predicate = ?', [sid, subject, predicate]))[0].n);
       add('Index entries pointing at deleted evidence', '0', (await q.all<{ n: number }>('SELECT count(*) AS n FROM memory_index i LEFT JOIN evidence e ON e.session = i.session AND e.id = i.evidence_id WHERE i.session = ? AND e.id IS NULL', [sid]))[0].n);
+      add('Booking text derived from deleted evidence', '0', (await q.all<Row>('SELECT parts FROM bookings WHERE session = ?', [sid])).flatMap((r) => JSON.parse(r.parts) as BookingPart[]).filter((x) => x.deps.some((d) => doomedIds.includes(d))).length);
       add('Usage records pointing at deleted evidence', '0', (await q.all<{ n: number }>('SELECT count(*) AS n FROM uses u LEFT JOIN evidence e ON e.session = u.session AND e.id = u.evidence_id WHERE u.session = ? AND e.id IS NULL', [sid]))[0].n);
       if (markers.length) {
         const ph = markers.map(() => '?').join(',');
@@ -403,6 +430,8 @@ export class Caveat {
     });
     const exp = JSON.stringify(await this.exportEnvelope(sid));
     add('Deleted content in a fresh export', '0', markers.filter((m) => terms(exp).includes(m)).length);
+    const job = this.worker.get(sid);
+    add('Queued jobs holding a copy of it', '0', job ? Number(job.evidenceIds.some((x) => doomedIds.includes(x)) || markers.some((m) => terms(JSON.stringify(job)).includes(m))) : 0);
     add('Decision-cache entries for older revisions', '0', [...this.cache.keys()].filter((k) => k.startsWith(`${sid}|`) && Number(k.split('|')[1]) < revision).length);
     const d = await this.decide(sid, { predicate, purpose: 'inspection' });
     add('Retrieval of this topic now', 'ABSTAIN', d.outcome);
@@ -461,7 +490,7 @@ export class Caveat {
   // ---------- EXPORT / IMPORT ----------
   /** A signed, session-bound export of the subject's own evidence. Signature = HMAC(server secret); it carries no session id. */
   async exportEnvelope(sid: string) {
-    const { clock, revision, all } = await this.db.tx(null, async (q) => ({ ...(await this.session(q, sid)), all: await this.evidence(q, sid) }));
+    const { clock, revision, all } = await this.db.tx(sid, async (q) => ({ ...(await this.session(q, sid)), all: await this.evidence(q, sid) })); // one locked snapshot: the signed revision matches the evidence
     const items = all.filter((e) => e.subject === 'maya').map((e) => ({
       subject: e.subject, predicate: e.predicate, scope: e.scopeKey ? { place: e.scopeKey.replace('place=', '') } : undefined, value: e.value, stance: e.stance,
       sourceKind: e.sourceKind, sourceLabel: e.sourceLabel, lineage: e.lineage, originId: e.originId, excerpt: e.excerpt,
@@ -484,11 +513,10 @@ export class Caveat {
   }
 
   // ---------- DELAYED WORKER ----------
-  /** Queue a nightly "profile digest" job. It captures the current summary now and writes it back later. */
+  /** Queue a nightly "profile digest" job. It records what it plans to summarize (ids + revision) and runs later. */
   async queueDigest(sid: string) {
     const snap = await this.snapshot(sid);
-    const captured = (['maya', 'sam'] as SubjectId[]).map((s) => ({ subject: s, ...this.summarize(snap.all, snap.tombs, s, snap.clock) }));
-    const job = { id: rid('job'), baseRevision: snap.revision, captured, queuedAt: snap.clock };
+    const job: WorkerJob = { id: rid('job'), baseRevision: snap.revision, evidenceIds: snap.all.map((e) => e.id), queuedAt: snap.clock };
     this.worker.set(sid, job);
     await this.db.tx(sid, (q) => this.audit(q, sid, snap.clock, 'worker.queued', { job: job.id, base_revision: snap.revision }));
     return { id: job.id, baseRevision: job.baseRevision };
@@ -502,11 +530,14 @@ export class Caveat {
       const { clock, revision } = await this.session(q, sid);
       if (revision !== job.baseRevision) {
         await this.audit(q, sid, clock, 'worker.fenced', { job: job.id, base_revision: job.baseRevision, revision });
-        return { job: job.id, written: false, baseRevision: job.baseRevision, revision, reason: `fenced: the job read revision ${job.baseRevision}, memory is now at revision ${revision}; its captured data was discarded` };
+        return { job: job.id, written: false, baseRevision: job.baseRevision, revision, reason: `fenced: the job was planned at revision ${job.baseRevision}, memory is now at revision ${revision}; it was discarded without writing` };
       }
-      for (const c of job.captured) {
-        await q.run('DELETE FROM summaries WHERE session = ? AND subject = ?', [sid, c.subject]);
-        if (c.text) await q.run('INSERT INTO summaries (session, subject, revision, text, deps) VALUES (?, ?, ?, ?, ?)', [sid, c.subject, revision, c.text, JSON.stringify(c.deps)]);
+      // Rehydrated under the session lock from current storage, never from a copy carried by the job.
+      const all = (await this.evidence(q, sid)).filter((e) => job.evidenceIds.includes(e.id)); const tombs = await this.tombstones(q, sid);
+      for (const subject of ['maya', 'sam'] as SubjectId[]) {
+        const c = this.summarize(all, tombs, subject, clock);
+        await q.run('DELETE FROM summaries WHERE session = ? AND subject = ?', [sid, subject]);
+        if (c.text) await q.run('INSERT INTO summaries (session, subject, revision, text, deps) VALUES (?, ?, ?, ?, ?)', [sid, subject, revision, c.text, JSON.stringify(c.deps)]);
       }
       await this.audit(q, sid, clock, 'worker.committed', { job: job.id, revision });
       return { job: job.id, written: true, baseRevision: job.baseRevision, revision, reason: 'memory unchanged since the job was queued: digest written' };
@@ -549,7 +580,7 @@ function distinctive(doomed: Evidence[], remaining: Evidence[]) {
   const keep = new Set(remaining.flatMap(indexTerms));
   for (const p of Object.values(PREDICATES)) for (const t of terms(p.label)) keep.add(t);
   for (const w of ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'morning', 'afternoon', 'evening', 'home', 'office', 'delivery', 'book', 'anything']) keep.add(w);
-  return [...new Set(doomed.flatMap(indexTerms))].filter((t) => !keep.has(t) && t.length >= 4);
+  return [...new Set(doomed.flatMap(indexTerms))].filter((t) => !keep.has(t) && t.length >= 3);
 }
 
 export const LIMITATIONS = [

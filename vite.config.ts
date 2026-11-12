@@ -5,6 +5,7 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   root: 'ui',
   plugins: [react()],
-  build: { outDir: '../public', emptyOutDir: true, sourcemap: false },
+  // assetsInlineLimit 0: every font is a same-origin file, so the CSP can stay `font-src 'self'` (no data: URIs).
+  build: { outDir: '../public', emptyOutDir: true, sourcemap: false, assetsInlineLimit: 0 },
   server: { proxy: { '/api': 'http://127.0.0.1:3000' } },
 });

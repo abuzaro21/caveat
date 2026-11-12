@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS uses (session TEXT NOT NULL, evidence_id TEXT NOT NUL
 CREATE INDEX IF NOT EXISTS uses_ev ON uses (session, evidence_id);
 CREATE TABLE IF NOT EXISTS bookings (session TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE, id TEXT NOT NULL,
   task TEXT NOT NULL, idem TEXT NOT NULL, slot_start BIGINT NOT NULL, slot_end BIGINT NOT NULL, place TEXT NOT NULL,
-  window_label TEXT NOT NULL, evidence_ids TEXT NOT NULL, reason TEXT NOT NULL, booked_at BIGINT NOT NULL,
+  window_label TEXT NOT NULL, evidence_ids TEXT NOT NULL, reason TEXT NOT NULL, parts TEXT NOT NULL, booked_at BIGINT NOT NULL,
   PRIMARY KEY (session, id), UNIQUE (session, idem));
 CREATE TABLE IF NOT EXISTS tombstones (session TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE, subject TEXT NOT NULL,
   predicate TEXT NOT NULL, mode TEXT NOT NULL, revoked_at BIGINT NOT NULL, revision BIGINT NOT NULL,

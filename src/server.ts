@@ -2,7 +2,7 @@
 // sees a hash of the token. All policy runs server-side; the browser cannot supply authority, time, or identity.
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
-import { extname, join, normalize, resolve } from 'node:path';
+import { extname, isAbsolute, join, normalize, relative, resolve, sep } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { Caveat, NotFound, Rejected, Blocked } from './memory.ts';
 import { isPredicate, PREDICATES, type Scope } from './model.ts';
@@ -115,8 +115,12 @@ export function createApp(o: AppOptions) {
 
   async function serveStatic(req: IncomingMessage, res: ServerResponse, path: string) {
     if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, { error: 'method not allowed' });
-    let file = normalize(join(publicDir, decodeURIComponent(path)));
-    if (!file.startsWith(publicDir)) return send(res, 400, { error: 'bad path' });
+    let rel: string;
+    try { rel = decodeURIComponent(path); } catch { return send(res, 400, { error: 'bad path' }); }
+    let file = resolve(publicDir, '.' + rel);
+    // Path-component containment, not a string prefix: "public-backup" is not inside "public".
+    const inside = relative(publicDir, file);
+    if (inside === '..' || inside.startsWith(`..${sep}`) || isAbsolute(inside) || rel.includes(String.fromCharCode(0))) return send(res, 400, { error: 'bad path' });
     try { if ((await stat(file)).isDirectory()) file = join(file, 'index.html'); } catch { file = join(publicDir, 'index.html'); }
     try {
       const data = await readFile(file);
@@ -127,8 +131,10 @@ export function createApp(o: AppOptions) {
   }
 
   const server = createServer(async (req, res) => {
-    const path = new URL(req.url ?? '/', 'http://x').pathname;
+    let path = '/';
     try {
+      // Parsed inside the error boundary: a malformed request target is a 400 for that request, never a crash.
+      try { path = new URL(req.url ?? '/', 'http://x').pathname; } catch { throw new Rejected('malformed request target'); }
       if (path.startsWith('/api/')) await api(req, res, path);
       else await serveStatic(req, res, path);
     } catch (e) {

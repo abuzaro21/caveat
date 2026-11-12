@@ -106,7 +106,7 @@ export function evaluate(all: Evidence[], tombstones: Tombstone[], q: Query): De
   }
   const exact = live.filter((e) => e.scopeKey === want && want !== '');
   const tier = exact.length ? exact : live.filter((e) => e.scopeKey === '');
-  const scopeMatch: Decision['scopeMatch'] = exact.length ? 'exact' : tier.length ? 'general' : 'none';
+  const scopeMatch: Decision['scopeMatch'] = exact.length || (!want && tier.length) ? 'exact' : tier.length ? 'general' : 'none'; // an unscoped predicate always matches exactly
   for (const e of live) if (!tier.includes(e)) put(e, 'less-specific', `general memory; a ${scopeLabel(want)}-specific one exists`);
 
   // 6. Explicit corrections supersede everything observed before them, whatever its authority.
@@ -121,25 +121,38 @@ export function evaluate(all: Evidence[], tombstones: Tombstone[], q: Query): De
   });
 
   // 7. Candidates: distinct supported values, each graded by its strongest support (+ independent corroboration).
-  type Cand = { value: unknown; supports: Evidence[]; grade: Grade; reasons: string[]; latest: number; latestSeq: number };
+  type Cand = { value: unknown; supports: Evidence[]; qualifying: Evidence[]; grade: Grade; reasons: string[]; latest: number; latestSeq: number };
   const cands: Cand[] = [];
   for (const e of active.filter((x) => x.stance === 'supports')) {
     let c = cands.find((x) => sameValue(x.value, e.value));
-    if (!c) cands.push(c = { value: e.value, supports: [], grade: 'unsupported', reasons: [], latest: 0, latestSeq: 0 });
+    if (!c) cands.push(c = { value: e.value, supports: [], qualifying: [], grade: 'unsupported', reasons: [], latest: 0, latestSeq: 0 });
     c.supports.push(e);
-    if (e.observedAt > c.latest || (e.observedAt === c.latest && e.seq > c.latestSeq)) { c.latest = e.observedAt; c.latestSeq = e.seq; }
   }
   for (const c of cands) {
     const graded = c.supports.map((e) => ({ e, ...baseGrade(q.predicate, e.sourceKind) })).sort((a, b) => gradeRank(b.grade) - gradeRank(a.grade));
     c.grade = graded[0].grade; c.reasons = [graded[0].reason];
-    const lineages = new Set(graded.filter((g) => g.grade === 'reported').map((g) => g.e.lineage));
-    if (c.grade === 'reported' && lineages.size >= 2) { c.grade = 'corroborated'; c.reasons.push(`${lineages.size} independent sources agree`); }
+    // Independence is server-attributed only: an unsigned import's caller-declared lineage earns no corroboration credit.
+    const independent = graded.filter((g) => g.grade === 'reported' && g.e.channel !== 'import:unsigned');
+    const lineages = new Set(independent.map((g) => g.e.lineage));
+    // The support that establishes the effective grade — and only that support — dates the memory. A weaker
+    // agreeing report (an unsigned import, say) is shown, but cannot refresh it or outdate disagreement.
+    let qualifying = graded.filter((g) => g.grade === c.grade).map((g) => g.e);
+    if (c.grade === 'reported' && lineages.size >= 2) {
+      c.grade = 'corroborated'; c.reasons.push(`${lineages.size} independent sources agree`);
+      // Corroboration exists from the moment the second independent source reported, not from the newest copy.
+      const perLineage = [...lineages].map((l) => independent.filter((g) => g.e.lineage === l).map((g) => g.e).sort(later)[0]).sort(later);
+      qualifying = [perLineage[1]];
+    }
+    const newest = qualifying.slice().sort(later)[0];
+    c.latest = newest.observedAt; c.latestSeq = newest.seq; c.qualifying = qualifying;
     const copies = c.supports.length - new Set(c.supports.map((e) => e.lineage)).size;
     if (copies > 0) c.reasons.push(`${copies} repeat${copies > 1 ? 's' : ''} from the same source counted once`);
+    const unsigned = c.supports.filter((e) => e.channel === 'import:unsigned').length;
+    if (unsigned && c.grade !== 'reported') c.reasons.push(`${unsigned} unsigned import${unsigned > 1 ? 's' : ''} shown, not counted`);
   }
   cands.sort((a, b) => gradeRank(b.grade) - gradeRank(a.grade) || b.latest - a.latest || b.latestSeq - a.latestSeq);
   const lead = cands[0];
-  const leadEv = lead ? lead.supports.slice().sort(later)[0] : undefined;
+  const leadEv = lead ? lead.qualifying.slice().sort(later)[0] : undefined;
 
   if (!lead) {
     for (const e of active) put(e, 'weak-dissent', 'argues against a value, but no value is supported');
@@ -159,7 +172,7 @@ export function evaluate(all: Evidence[], tombstones: Tombstone[], q: Query): De
   for (const e of active) {
     const g = baseGrade(q.predicate, e.sourceKind).grade;
     const agrees = e.stance === 'supports' && sameValue(e.value, lead.value);
-    if (agrees) { put(e, e === leadEv ? 'leader' : 'supports', e === leadEv ? 'the latest confirmation of the leading memory' : 'supports the leading memory'); continue; }
+    if (agrees) { put(e, e === leadEv ? 'leader' : 'supports', e === leadEv ? 'the latest confirmation of the leading memory' : lead.qualifying.includes(e) || gradeRank(g) >= gradeRank(lead.grade) ? 'supports the leading memory' : 'agrees, but at lower authority: shown, cannot refresh or settle it'); continue; }
     const against = (e.stance === 'opposes' && sameValue(e.value, lead.value)) || e.stance === 'supports';
     if (!against) { put(e, 'outdated', 'argues against a value that is not the leading memory'); continue; }
     const what = e.stance === 'opposes' ? `suggests ${valueLabel(q.predicate, lead.value)} may no longer be right` : `says ${valueLabel(q.predicate, e.value)}`;
